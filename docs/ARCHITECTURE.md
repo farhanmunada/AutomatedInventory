@@ -1,6 +1,6 @@
 # Arsitektur Sistem — Automated Inventory & Order Fulfillment Dashboard
 
-> **Versi:** 1.1
+> **Versi:** 1.2
 > **Tanggal:** 2026-09-27
 > **Status:** `APPROVED` — Gerbang 2 disetujui. **Revisi v1.2 (2026-09-27): Redis & BullMQ DIHAPUS** atas keputusan operator. Seluruh mekanisme cache/queue/worker di dokumen ini **tidak lagi berlaku**, digantikan scan DB + cron in-process (`AutoReleaseService`). Bagian terdampak ditandai *(superseded)*; riwayat desain tetap ada. Deviasi §11. Backend Tahap 2 selesai: 64/64 assertion E2E vs Neon nyata.
 > **PRD pendukung:** `docs/PRD.md` (APPROVED)
@@ -422,26 +422,25 @@ Fase implementasi dipecah menjadi sub-tugas independen. Tiap sub-tugas = 1 unit 
 | 2.6 | Dashboard API (stock-summary, valuation, low-stock, order-stats) | `dashboard/*.ts` | ✅ Kriteria 7.1.1, 7.1.3, 7.2.1 lulus |
 | 2.7 | Auto-release cron + reconciliation boot | `orders/auto-release.service.ts` | ✅ Kriteria 6.1.1–6.1.4 (scan DB, tanpa queue) |
 
-### Tahap 3 — Frontend (berjalan)
+### Tahap 3 - Frontend - SELESAI (14 assertion smoke-web lulus)
 | # | Sub-tugas | File Utama | Verifikasi |
 |---|---|---|---|
-| 3.1 | Next.js skeleton + shadcn init + API client + auth flow | `app/(auth)/login/`, `lib/api.ts`, `features/auth/` | Login redirect ke dashboard |
-| 3.2 | Shared layout + TanStack Query provider | `app/(dashboard)/layout.tsx` | Persist token, logout |
-| 3.3 | Dashboard page | `features/dashboard/` | Kriteria 7.1.1, 7.2.1 di UI |
-| 3.4 | Products list + detail | `features/products/` | Kriteria 2.1.1–2.1.4 |
-| 3.5 | Lots list + create form | `features/lots/` | Kriteria 3.x |
-| 3.6 | Orders list + detail + status action | `features/orders/` | Kriteria 5.x di UI |
-| 3.7 | Create order form (multi-item) | `features/orders/new/` | Kriteria 4.1.1–4.1.3 |
+| 3.1 | Next.js skeleton + API client + auth flow | ``lib/api.ts``, ``components/auth-guard.tsx``, ``app/login/page.tsx`` | Login 200 via proxy, token tersimpan, 401 bounce |
+| 3.2 | Shared layout + TanStack Query provider | ``app/(dashboard)/layout.tsx``, ``app/providers.tsx``, ``components/dashboard-nav.tsx`` | Nav aktif, token dipertahankan antar halaman |
+| 3.3 | Dashboard page | ``app/(dashboard)/page.tsx`` | Kriteria 7.1.1, 7.1.3, 7.2.1 di UI + polling 30s |
+| 3.4 | Products list + detail | ``app/(dashboard)/products/`` | Kriteria 2.1.1-2.1.4, form CRUD + dialog |
+| 3.5 | Lots list + create form | ``app/(dashboard)/lots/page.tsx``, ``components/lot-form-dialog.tsx`` | Kriteria 3.1.1-3.1.3 |
+| 3.6 | Orders list + detail + status action | ``app/(dashboard)/orders/``, ``components/transition-control.tsx`` | Kriteria 5.x - dropdown hanya transisi valid |
+| 3.7 | Create order form (multi-item) | ``app/(dashboard)/orders/new/page.tsx`` | Kriteria 4.1.1-4.1.3 + guard stok |
 
-### Tahap 4 — Verifikasi & Seal
+### Tahap 4 - Verifikasi & Seal - SELESAI
 | # | Sub-tugas | Verifikasi |
 |---|---|---|
-| 4.1 | Concurrency test (10 order paralel) | Zero oversell (G1) — ✅ lulus di smoke-e2e |
-| 4.2 | Full regression + typecheck + lint | `pnpm -r exec tsc --noEmit` 0 error |
-| 4.3 | Production build | `pnpm build` sukses |
-| 4.4 | Dokumentasi sync + commit final | `docs/` up-to-date |
+| 4.1 | Concurrency test (10 order paralel) | Zero oversell (G1) - lulus di smoke-e2e |
+| 4.2 | Full regression + typecheck | ``pnpm typecheck`` 0 error; backend 67/67; frontend 14/14. Lint frontend: lihat catatan di atas |
+| 4.3 | Production build | ``pnpm build`` dari root sukses (backend + 9 route frontend) |
+| 4.4 | Dokumentasi sync + commit final | ``docs/`` sinkron dengan implementasi, commit atomik per tahap |
 
----
 
 ## 9. Risiko & Mitigasi
 
@@ -458,16 +457,14 @@ Fase implementasi dipecah menjadi sub-tugas independen. Tiap sub-tugas = 1 unit 
 
 ## 10. Lingkup Eksekusi Sekarang
 
-**Status (2026-09-27):** Tahap 1, 2, dan 3 **SELESAI & terverifikasi** (67 assertion backend + 14 assertion frontend).
+**Status (2026-09-27):** Tahap 1-4 **SELESAI & terverifikasi.** Total 81 assertion lulus (67 backend Tier-2 + 14 frontend Tier-2), `pnpm typecheck` 0 error, `pnpm build` dari root sukses.
 
-Sisa Tahap 4:
+Satu-satunya sisa pekerjaan yang butuh keputusan manusia:
 
-| # | Sisa pekerjaan | Catatan |
-|---|---|---|
-| 4.2 | `pnpm lint` penuh untuk frontend | `eslint-config-next` sengaja tidak dipasang (tidak ada di manifest §6.2). Pengganti saat ini: `tsc --noEmit` + `next build` |
-| 4.3 | `pnpm build` dari root | jalan; backend `nest build` + frontend `next build` |
-| 4.4 | Commit seal | dilakukan per tahap (atomik) |
-
+| # | Item | Kenapa belum | Butuh |
+|---|---|---|---|
+| 1 | Uji interaksi level browser (klik, isi form, transisi status di DOM nyata) | `smoke-web.js` hanya memverifikasi HTML hasil SSR + kontrak proxy `/api`; belum ada suite yang menjalankan browser | Persetujuan menambah `playwright` sebagai devDependency (aturan No Hallucinated Dependencies) |
+| 2 | Timeline `/orders/[id]` memakai `updated_at` untuk semua langkah | State machine tidak menyimpan timestamp per transisi | perlu kolom/tabel history baru = perubahan skema, di luar scope v1 |
 **Tidak termasuk eksekusi ini:** deployment production, CI/CD pipeline, observability setup (post-MVP per `skill-observability-and-instrumentation`).
 
 ---
