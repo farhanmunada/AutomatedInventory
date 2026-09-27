@@ -9,7 +9,8 @@
     "test": "pnpm -r test",
     "db:migrate": "pnpm --filter @repo/backend db:migrate",
     "db:generate": "pnpm --filter @repo/backend db:generate",
-    "seed:admin": "pnpm --filter @repo/backend seed:admin"
+    "seed:admin": "pnpm --filter @repo/backend seed:admin",
+    "seed:demo": "pnpm --filter @repo/backend seed:demo"
   },
   "packageManager": "pnpm@12.6.0",
   "engines": {

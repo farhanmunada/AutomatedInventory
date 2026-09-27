@@ -10,7 +10,8 @@
     "test": "nest build && node scripts/smoke-e2e.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "seed:admin": "nest build && node dist/scripts/seed-admin.js"
+    "seed:admin": "nest build && node dist/scripts/seed-admin.js",
+    "seed:demo": "nest build && node dist/scripts/seed-demo.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
