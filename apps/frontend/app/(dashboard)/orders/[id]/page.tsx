@@ -59,16 +59,16 @@ export default function OrderDetailPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-sm text-[#475569]">
-          <Link href="/orders" className="text-[#1e40af] hover:underline">
+        <p className="text-sm text-ink-muted">
+          <Link href="/orders" className="text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink">
             Pesanan
           </Link>{' '}
           / {order.order_number}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-3">
-          <h1 className="text-lg font-semibold">{order.order_number}</h1>
+          <h1 className="data text-xl font-semibold">{order.order_number}</h1>
           <StatusBadge status={status} />
-          <span className="text-sm text-[#475569]">Kanal {order.channel}</span>
+          <span className="text-sm text-ink-muted">Kanal {order.channel}</span>
           <div className="ml-auto">
             <TransitionControl orderId={order.id} status={status} />
           </div>
@@ -84,10 +84,12 @@ export default function OrderDetailPage() {
                 <span
                   aria-hidden
                   className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ background: done ? '#16a34a' : '#cbd5e1' }}
+                  style={{
+                    background: done ? 'var(--color-flag-ok)' : 'var(--color-line)',
+                  }}
                 />
-                <span className={done ? undefined : 'text-[#475569]'}>{STEP_LABELS[step]}</span>
-                <span className="text-xs text-[#475569]">
+                <span className={done ? undefined : 'text-ink-muted'}>{STEP_LABELS[step]}</span>
+                <span className="text-xs text-ink-muted">
                   {done
                     ? index === 0
                       ? formatDateTime(order.created_at)
@@ -98,15 +100,15 @@ export default function OrderDetailPage() {
             );
           })}
           {cancelled ? (
-            <li className="flex items-center gap-2 text-sm text-[#b91c1c]">
-              <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full bg-[#dc2626]" />
+            <li className="flex items-center gap-2 text-sm text-flag-critical">
+              <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full bg-flag-critical" />
               Dibatalkan
-              <span className="text-xs text-[#475569]">{formatDateTime(order.updated_at)}</span>
+              <span className="text-xs text-ink-muted">{formatDateTime(order.updated_at)}</span>
             </li>
           ) : null}
         </ol>
         {cancelled ? (
-          <p className="border-t border-[#e2e8f0] px-3 py-2 text-sm text-[#475569]">
+          <p className="border-t border-line px-3 py-2 text-sm text-ink-muted">
             Stok pesanan ini sudah dikembalikan ke lot asalnya.
           </p>
         ) : null}
@@ -114,29 +116,29 @@ export default function OrderDetailPage() {
 
       <Card title={`Item & Alokasi (${order.items.length})`}>
         {order.items.length === 0 ? (
-          <p className="px-3 py-8 text-[#475569]">Pesanan ini tidak memiliki item.</p>
+          <p className="px-3 py-8 text-ink-muted">Pesanan ini tidak memiliki item.</p>
         ) : (
-          <ul className="divide-y divide-[#e2e8f0]">
+          <ul className="divide-y divide-line">
             {order.items.map((item) => (
               <li key={item.id} className="px-3 py-3">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <Link
                     href={`/products/${item.product_id}`}
-                    className="font-medium text-[#1e40af] hover:underline"
+                    className="font-medium text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink"
                   >
                     {item.sku}
                   </Link>
                   <span>{item.name}</span>
-                  <span className="tabular-nums text-[#475569]">× {formatQty(item.requested_qty)}</span>
+                  <span className="data text-ink-muted">× {formatQty(item.requested_qty)}</span>
                 </div>
                 {item.allocations.length === 0 ? (
-                  <p className="mt-1 text-sm text-[#475569]">Stok belum dialokasikan (status DRAFT).</p>
+                  <p className="mt-1 text-sm text-ink-muted">Stok belum dialokasikan (status DRAFT).</p>
                 ) : (
                   <ul className="mt-1 space-y-0.5 text-sm">
                     {item.allocations.map((allocation) => (
-                      <li key={`${allocation.lot_id}`} className="text-[#475569]">
+                      <li key={`${allocation.lot_id}`} className="text-ink-muted">
                         Lot diterima {formatDateTime(allocation.lot_received_at)} —{' '}
-                        <span className="tabular-nums">
+                        <span className="data">
                           {formatQty(allocation.allocated_qty)} unit
                         </span>
                       </li>

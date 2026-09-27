@@ -42,19 +42,22 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-4">
+      <p className="data text-ink-muted tracking-[0.2em] uppercase">
+        Gudang · Kendali Stok
+      </p>
       <form
         onSubmit={submit}
         className="card w-full max-w-sm p-5"
         aria-label="Form login"
       >
-        <h1 className="text-lg font-semibold">Masuk ke Dashboard</h1>
-        <p className="mt-1 text-[#475569]">
+        <h1 className="text-xl font-semibold">Masuk ke Dashboard</h1>
+        <p className="mt-1 text-ink-muted">
           Gunakan akun staf yang diberikan administrator.
         </p>
 
         <label className="mt-4 block">
-          <span className="mb-1 block text-sm font-medium">Username</span>
+          <span className="field-label">Username</span>
           <input
             className="input"
             value={username}
@@ -66,7 +69,7 @@ export default function LoginPage() {
         </label>
 
         <label className="mt-3 block">
-          <span className="mb-1 block text-sm font-medium">Password</span>
+          <span className="field-label">Password</span>
           <input
             className="input"
             type="password"

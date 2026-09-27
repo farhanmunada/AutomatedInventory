@@ -8,7 +8,7 @@ export function ErrorBanner({ error, onRetry }: { error: unknown; onRetry?: () =
   return (
     <div
       role="alert"
-      className="card mb-3 flex flex-wrap items-center justify-between gap-2 border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[#b91c1c]"
+      className="card mb-3 flex flex-wrap items-center justify-between gap-2 border-flag-critical bg-surface px-3 py-2 text-flag-critical"
     >
       <span>{message}</span>
       {onRetry ? (
@@ -29,7 +29,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-start gap-2 px-4 py-8">
-      <p className="text-[#475569]">{title}</p>
+      <p className="text-ink-muted">{title}</p>
       {action}
     </div>
   );
@@ -46,8 +46,8 @@ export function Card({
 }) {
   return (
     <section className="card">
-      <div className="flex items-center justify-between gap-2 border-b border-[#e2e8f0] px-3 py-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+        <h2 className="page-title">{title}</h2>
         {action}
       </div>
       <div>{children}</div>
@@ -55,6 +55,10 @@ export function Card({
   );
 }
 
+/**
+ * Ledger-strip metric cell: no individual card frame — the parent row supplies
+ * vertical rules between cells (docs/DESIGN.md §4: avoid monotonous card kits).
+ */
 export function StatTile({
   label,
   value,
@@ -65,13 +69,17 @@ export function StatTile({
   tone?: 'warning' | 'destructive';
 }) {
   return (
-    <div className="card px-3 py-2">
-      <p className="text-xs text-[#475569]">{label}</p>
+    <div className="flex flex-col justify-center gap-1 border-b border-line px-4 py-3 lg:border-b-0 lg:border-l lg:first:border-l-0">
+      <p className="field-label mb-0">{label}</p>
       <p
-        className="mt-1 text-xl font-semibold tabular-nums"
+        className="data text-2xl font-semibold"
         style={{
           color:
-            tone === 'warning' ? '#d97706' : tone === 'destructive' ? '#dc2626' : undefined,
+            tone === 'warning'
+              ? 'var(--color-flag-warn)'
+              : tone === 'destructive'
+                ? 'var(--color-flag-critical)'
+                : undefined,
         }}
       >
         {value}
@@ -96,8 +104,8 @@ export function PaginationBar({
   const to = Math.min(total, page * limit);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e2e8f0] px-3 py-2 text-sm">
-      <span className="text-[#475569]">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2 text-sm">
+      <span className="text-ink-muted">
         Menampilkan {from}-{to} dari {total}
       </span>
       <span className="flex items-center gap-2">
@@ -109,7 +117,7 @@ export function PaginationBar({
         >
           Sebelumnya
         </button>
-        <span className="tabular-nums text-[#475569]">
+        <span className="data text-ink-muted">
           {page} / {pages}
         </span>
         <button

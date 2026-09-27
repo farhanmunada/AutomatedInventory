@@ -37,7 +37,7 @@ export default function OrdersPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Pesanan</h1>
+        <h1 className="page-title">Pesanan</h1>
         <Link href="/orders/new" className="btn btn-primary">
           Buat Pesanan
         </Link>
@@ -100,7 +100,7 @@ export default function OrdersPage() {
           <TableSkeleton cols={5} />
         ) : rows.length === 0 ? (
           <div className="px-3 py-8">
-            <p className="text-[#475569]">
+            <p className="text-ink-muted">
               {hasFilter
                 ? 'Tidak ada pesanan yang cocok dengan filter ini.'
                 : 'Belum ada pesanan. Buat pesanan pertama Anda.'}
@@ -127,11 +127,11 @@ export default function OrdersPage() {
                 {rows.map((order) => {
                   const next = VALID_TRANSITIONS[order.status as OrderStatus];
                   return (
-                    <tr key={order.id} className="row-alt">
+                    <tr key={order.id} className="row">
                       <td className="td">
                         <Link
                           href={`/orders/${order.id}`}
-                          className="text-[#1e40af] hover:underline"
+                          className="data text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink"
                         >
                           {order.order_number}
                         </Link>
@@ -140,10 +140,12 @@ export default function OrdersPage() {
                       <td className="td">
                         <StatusBadge status={order.status as OrderStatus} />
                       </td>
-                      <td className="td text-xs text-[#475569]">
+                      <td className="td text-xs text-ink-muted">
                         {next.length > 0 ? next.join(', ') : '— final'}
                       </td>
-                      <td className="td whitespace-nowrap">{formatDateTime(order.created_at)}</td>
+                      <td className="td data whitespace-nowrap text-ink-muted">
+                        {formatDateTime(order.created_at)}
+                      </td>
                     </tr>
                   );
                 })}

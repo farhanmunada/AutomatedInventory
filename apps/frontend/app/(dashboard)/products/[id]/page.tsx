@@ -50,13 +50,14 @@ export default function ProductDetailPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm text-[#475569]">
-            <Link href="/products" className="text-[#1e40af] hover:underline">
+          <p className="text-sm text-ink-muted">
+            <Link href="/products" className="text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink">
               Produk
             </Link>{' '}
             / {product.sku}
           </p>
-          <h1 className="text-lg font-semibold">{product.name}</h1>
+          <h1 className="text-xl font-semibold">{product.name}</h1>
+          <p className="data text-ink-muted">{product.sku}</p>
         </div>
         <div className="flex items-center gap-2">
           <StockBadge
@@ -71,28 +72,28 @@ export default function ProductDetailPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card title="Stok Tersedia">
-          <p className="px-3 py-2 text-xl font-semibold tabular-nums">
+          <p className="px-3 py-2 text-xl font-semibold data">
             {formatQty(product.available_stock)}
           </p>
         </Card>
         <Card title="Buffer Minimum">
-          <p className="px-3 py-2 text-xl font-semibold tabular-nums">
+          <p className="px-3 py-2 text-xl font-semibold data">
             {formatQty(product.min_buffer_stock)}
           </p>
         </Card>
         <Card title="Total Diterima">
-          <p className="px-3 py-2 text-xl font-semibold tabular-nums">
+          <p className="px-3 py-2 text-xl font-semibold data">
             {formatQty(lots.reduce((sum, lot) => sum + lot.initial_qty, 0))}
           </p>
         </Card>
         <Card title="Total Keluar">
-          <p className="px-3 py-2 text-xl font-semibold tabular-nums">{formatQty(consumed)}</p>
+          <p className="px-3 py-2 text-xl font-semibold data">{formatQty(consumed)}</p>
         </Card>
       </div>
 
       <Card title={`Lot Aktif (${lots.length})`}>
         {lots.length === 0 ? (
-          <p className="px-3 py-8 text-[#475569]">
+          <p className="px-3 py-8 text-ink-muted">
             Belum ada lot untuk produk ini. Terima stok pertama lewat halaman Lots.
           </p>
         ) : (
@@ -109,19 +110,19 @@ export default function ProductDetailPage() {
               </thead>
               <tbody>
                 {lots.map((lot) => (
-                  <tr key={lot.id} className="row-alt">
+                  <tr key={lot.id} className="row">
                     <td className="td">{formatDate(lot.received_at)}</td>
-                    <td className="td text-right tabular-nums">
+                    <td className="td data text-right">
                       {formatCurrency(lot.purchase_price)}
                     </td>
-                    <td className="td text-right tabular-nums">{formatQty(lot.initial_qty)}</td>
-                    <td className="td text-right tabular-nums">
+                    <td className="td data text-right">{formatQty(lot.initial_qty)}</td>
+                    <td className="td data text-right">
                       {formatQty(lot.available_qty)}
                       {lot.available_qty === 0 ? (
-                        <span className="ml-2 text-xs text-[#475569]">habis</span>
+                        <span className="ml-2 text-xs text-ink-muted">habis</span>
                       ) : null}
                     </td>
-                    <td className="td text-right tabular-nums">
+                    <td className="td data text-right">
                       {formatCurrency(Number(lot.purchase_price) * lot.available_qty)}
                     </td>
                   </tr>
@@ -130,7 +131,7 @@ export default function ProductDetailPage() {
             </table>
           </div>
         )}
-        <p className="px-3 py-2 text-xs text-[#475569]">
+        <p className="px-3 py-2 text-xs text-ink-muted">
           Lot diurutkan FIFO — pesanan selalu mengambil lot tertua lebih dulu.
         </p>
       </Card>

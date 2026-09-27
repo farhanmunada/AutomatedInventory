@@ -1,17 +1,17 @@
 @import 'tailwindcss';
 
+/* Design tokens: "warehouse control room" — docs/DESIGN.md */
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #0f172a;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #475569;
-  --color-border: #e2e8f0;
-  --color-primary: #1e40af;
-  --color-primary-foreground: #ffffff;
-  --color-destructive: #dc2626;
-  --color-warning: #d97706;
-  --color-success: #16a34a;
+  --color-paper: #faf9f5;
+  --color-surface: #ffffff;
+  --color-ink: #1c1917;
+  --color-ink-muted: #57534e;
+  --color-line: #e7e5e0;
+  --color-flag-critical: #b42318;
+  --color-flag-warn: #b45309;
+  --color-flag-ok: #15803d;
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-data: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 }
 
 html {
@@ -19,9 +19,9 @@ html {
 }
 
 body {
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-size: 14px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-size: 13.5px;
 }
 
 h1,
@@ -30,11 +30,26 @@ h3 {
   font-weight: 600;
 }
 
+/* Page/section headings: manifest style, used consistently (not per-heading eyebrow). */
+.page-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Data & identity: SKU, order numbers, quantities, money, timestamps. */
+.data {
+  font-family: var(--font-data);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 @layer utilities {
   .card {
-    border: 1px solid var(--color-border);
-    border-radius: 0.375rem;
-    background: var(--color-background);
+    border: 1px solid var(--color-line);
+    border-radius: 2px;
+    background: var(--color-surface);
   }
 
   .btn {
@@ -42,83 +57,127 @@ h3 {
     align-items: center;
     justify-content: center;
     gap: 0.375rem;
-    border-radius: 0.375rem;
-    border: 1px solid var(--color-border);
-    background: var(--color-background);
+    border-radius: 2px;
+    border: 1px solid var(--color-ink);
+    background: var(--color-surface);
     padding: 0.375rem 0.75rem;
     font-weight: 500;
-    color: var(--color-foreground);
+    font-size: 13px;
+    color: var(--color-ink);
     cursor: pointer;
   }
 
   .btn:hover:not(:disabled) {
-    background: var(--color-muted);
+    background: var(--color-ink);
+    color: var(--color-surface);
   }
 
+  /* Single bold action: solid ink, never generic blue. */
   .btn-primary {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    color: var(--color-primary-foreground);
+    background: var(--color-ink);
+    border-color: var(--color-ink);
+    color: var(--color-surface);
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: #1b3a9c;
+    background: #0c0a09;
   }
 
   .btn-danger {
-    background: var(--color-destructive);
-    border-color: var(--color-destructive);
+    background: var(--color-flag-critical);
+    border-color: var(--color-flag-critical);
+    color: #ffffff;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: #991b1b;
     color: #ffffff;
   }
 
   .btn:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: not-allowed;
   }
 
-  .input {
-    border: 1px solid var(--color-border);
-    border-radius: 0.375rem;
-    padding: 0.375rem 0.625rem;
-    background: var(--color-background);
-    color: var(--color-foreground);
-    width: 100%;
+  .btn:focus-visible,
+  .input:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
   }
 
-  .input:focus {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 1px;
+  .input {
+    border: 1px solid var(--color-line);
+    border-radius: 2px;
+    padding: 0.375rem 0.625rem;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    width: 100%;
+    font-size: 13px;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+    margin-bottom: 2px;
   }
 
   .field-error {
-    color: var(--color-destructive);
+    color: var(--color-flag-critical);
     font-size: 12px;
     margin-top: 2px;
   }
 
+  /* Table: the star of the layout. Double rule under header = carbon-copy paper. */
   .th {
     text-align: left;
     font-weight: 600;
-    font-size: 12px;
-    color: var(--color-muted-foreground);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 3px double var(--color-line);
     white-space: nowrap;
   }
 
   .td {
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--color-border);
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--color-line);
     vertical-align: middle;
+    font-size: 13px;
   }
 
-  .row-alt:nth-child(even) {
-    background: var(--color-muted);
+  .row:hover {
+    background: var(--color-paper);
+  }
+
+  /* The one loud element: low-stock rows get a red ledger mark + red figure. */
+  .row-critical {
+    box-shadow: inset 3px 0 0 var(--color-flag-critical);
+  }
+
+  .row-critical .td-figure {
+    color: var(--color-flag-critical);
+    font-weight: 600;
+  }
+
+  .row-warn {
+    box-shadow: inset 3px 0 0 var(--color-flag-warn);
+  }
+
+  .row-warn .td-figure {
+    color: var(--color-flag-warn);
+    font-weight: 600;
   }
 
   .skeleton {
-    background: var(--color-muted);
-    border-radius: 0.25rem;
+    background: var(--color-line);
+    border-radius: 2px;
     animation: pulse 1.4s ease-in-out infinite;
   }
 
@@ -128,7 +187,13 @@ h3 {
       opacity: 1;
     }
     50% {
-      opacity: 0.45;
+      opacity: 0.4;
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
   }
 }

@@ -43,7 +43,7 @@ export function TransitionControl({
   });
 
   if (options.length === 0) {
-    return <span className="text-xs text-[#475569]">Status final</span>;
+    return <span className="text-xs text-ink-muted">Status final</span>;
   }
 
   return (

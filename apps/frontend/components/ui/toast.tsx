@@ -45,7 +45,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             style={{
               borderLeftWidth: 4,
               borderLeftStyle: 'solid',
-              borderLeftColor: toast.kind === 'success' ? '#16a34a' : '#dc2626',
+              borderLeftColor:
+                toast.kind === 'success' ? 'var(--color-flag-ok)' : 'var(--color-flag-critical)',
             }}
           >
             {toast.message}

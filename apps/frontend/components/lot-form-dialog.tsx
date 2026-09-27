@@ -152,7 +152,7 @@ export function LotFormDialog({
             aria-invalid={Boolean(errors.received_at)}
           />
           {errors.received_at ? <span className="field-error">{errors.received_at}</span> : null}
-          <span className="text-xs text-[#475569]">
+          <span className="text-xs text-ink-muted">
             Tanggal ini menentukan urutan FIFO — lot tertua keluar lebih dulu.
           </span>
         </label>

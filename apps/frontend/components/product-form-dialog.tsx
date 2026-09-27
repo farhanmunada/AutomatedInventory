@@ -114,7 +114,7 @@ export function ProductFormDialog({
             onChange={(event) => setForm({ ...form, min_buffer_stock: event.target.value })}
             aria-invalid={Boolean(errors.min_buffer_stock)}
           />
-          <span className="text-xs text-[#475569]">
+          <span className="text-xs text-ink-muted">
             Peringatan stok rendah muncul saat stok ≤ nilai ini.
           </span>
           {errors.min_buffer_stock ? (

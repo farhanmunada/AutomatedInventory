@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { Card, ErrorBanner, PaginationBar } from '@/components/data-ui';
 import { LotFormDialog } from '@/components/lot-form-dialog';
 import { TableSkeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/cn';
 import { listLots, listProducts } from '@/lib/endpoints';
 import { formatCurrency, formatDateTime, formatQty } from '@/lib/format';
 
@@ -44,7 +45,7 @@ export default function LotsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Inventory Lots</h1>
+        <h1 className="page-title">Inventory Lots</h1>
         <button type="button" className="btn btn-primary" onClick={() => setFormOpen(true)}>
           Terima Lot Baru
         </button>
@@ -102,7 +103,7 @@ export default function LotsPage() {
           <TableSkeleton cols={6} />
         ) : rows.length === 0 ? (
           <div className="px-3 py-8">
-            <p className="text-[#475569]">
+            <p className="text-ink-muted">
               Belum ada lot. Terima stok pertama agar produk punya angka untuk dijual.
             </p>
             <button
@@ -129,34 +130,33 @@ export default function LotsPage() {
               <tbody className={query.isFetching ? 'opacity-60' : undefined}>
                 {rows.map((lot) => {
                   const product = productNames.get(lot.product_id);
+                  const critical = lot.available_qty === 0;
                   return (
-                    <tr key={lot.id} className="row-alt">
+                    <tr key={lot.id} className={cn('row', critical && 'row-critical')}>
                       <td className="td">
                         {product ? (
                           <Link
                             href={`/products/${product.id}`}
-                            className="text-[#1e40af] hover:underline"
+                            className="data text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink"
                           >
                             {product.sku}
                           </Link>
                         ) : (
-                          <span className="text-[#475569]">{lot.product_id.slice(0, 8)}</span>
+                          <span className="data text-ink-muted">{lot.product_id.slice(0, 8)}</span>
                         )}
                         {product ? (
-                          <span className="block text-xs text-[#475569]">{product.name}</span>
+                          <span className="block text-xs text-ink-muted">{product.name}</span>
                         ) : null}
                       </td>
-                      <td className="td whitespace-nowrap">{formatDateTime(lot.received_at)}</td>
-                      <td className="td text-right tabular-nums">
+                      <td className="td data whitespace-nowrap">{formatDateTime(lot.received_at)}</td>
+                      <td className="td data text-right">
                         {formatCurrency(lot.purchase_price)}
                       </td>
-                      <td className="td text-right tabular-nums">{formatQty(lot.initial_qty)}</td>
-                      <td className="td text-right tabular-nums">
-                        <span className={lot.available_qty === 0 ? 'text-[#dc2626]' : 'font-semibold'}>
-                          {formatQty(lot.available_qty)}
-                        </span>
+                      <td className="td data text-right">{formatQty(lot.initial_qty)}</td>
+                      <td className={cn('td data text-right', critical ? 'td-figure' : 'font-semibold')}>
+                        {formatQty(lot.available_qty)}
                       </td>
-                      <td className="td text-right tabular-nums">
+                      <td className="td data text-right">
                         {formatQty(lot.initial_qty - lot.available_qty)}
                       </td>
                     </tr>

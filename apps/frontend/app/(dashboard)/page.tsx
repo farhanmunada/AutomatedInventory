@@ -48,9 +48,9 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Dashboard</h1>
+      <h1 className="page-title">Dashboard</h1>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="card grid grid-cols-2 lg:grid-cols-4">
         {summary.isPending ? (
           <div className="skeleton h-20" />
         ) : (
@@ -93,7 +93,7 @@ export default function DashboardPage() {
         <Card
           title="Valuasi Stok per Produk"
           action={
-            <Link href="/products" className="text-sm text-[#1e40af] hover:underline">
+            <Link href="/products" className="text-sm text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink">
               Lihat semua produk
             </Link>
           }
@@ -101,7 +101,7 @@ export default function DashboardPage() {
           {valuation.isPending ? (
             <TableSkeleton rows={5} cols={3} />
           ) : (valuation.data?.length ?? 0) === 0 ? (
-            <p className="px-3 py-6 text-[#475569]">
+            <p className="px-3 py-6 text-ink-muted">
               Belum ada stok. Tambahkan lot lewat halaman Lots.
             </p>
           ) : (
@@ -115,18 +115,18 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {valuation.data!.slice(0, 10).map((row) => (
-                  <tr key={row.product_id} className="row-alt">
+                  <tr key={row.product_id} className="row">
                     <td className="td">
                       <Link
                         href={`/products/${row.product_id}`}
-                        className="text-[#1e40af] hover:underline"
+                        className="data text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink"
                       >
                         {row.sku}
                       </Link>
-                      <span className="block text-xs text-[#475569]">{row.name}</span>
+                      <span className="block text-xs text-ink-muted">{row.name}</span>
                     </td>
-                    <td className="td text-right tabular-nums">{formatQty(row.total_qty)}</td>
-                    <td className="td text-right tabular-nums">
+                    <td className="td data text-right">{formatQty(row.total_qty)}</td>
+                    <td className="td data text-right">
                       {formatCurrencyShort(row.total_value)}
                     </td>
                   </tr>
@@ -147,25 +147,25 @@ export default function DashboardPage() {
           {lowStock.isPending ? (
             <TableSkeleton rows={4} cols={2} />
           ) : (lowStock.data?.length ?? 0) === 0 ? (
-            <p className="px-3 py-6 text-[#475569]">
+            <p className="px-3 py-6 text-ink-muted">
               Semua produk di atas batas buffer. Tidak ada tindakan yang diperlukan.
             </p>
           ) : (
-            <ul className="divide-y divide-[#e2e8f0]">
+            <ul className="divide-y divide-line">
               {lowStock.data!.map((row) => (
                 <li key={row.product_id} className="flex items-center justify-between gap-2 px-3 py-2">
                   <Link
                     href={`/products/${row.product_id}`}
-                    className="text-[#1e40af] hover:underline"
+                    className="data text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink"
                   >
                     {row.sku}
-                    <span className="ml-2 text-xs text-[#475569]">{row.name}</span>
+                    <span className="ml-2 text-xs text-ink-muted">{row.name}</span>
                   </Link>
-                  <span className="tabular-nums text-sm">
-                    <span className="font-semibold text-[#d97706]">
+                  <span className="data text-sm">
+                    <span className="font-semibold text-flag-warn">
                       {formatQty(row.total_qty)}
                     </span>
-                    <span className="text-[#475569]"> / min {formatQty(row.min_buffer_stock)}</span>
+                    <span className="text-ink-muted"> / min {formatQty(row.min_buffer_stock)}</span>
                   </span>
                 </li>
               ))}

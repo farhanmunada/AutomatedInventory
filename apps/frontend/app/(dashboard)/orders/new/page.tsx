@@ -123,7 +123,7 @@ export default function NewOrderPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Buat Pesanan</h1>
+        <h1 className="page-title">Buat Pesanan</h1>
         <Link href="/orders" className="btn">
           Batal
         </Link>
@@ -181,7 +181,7 @@ export default function NewOrderPage() {
                     </td>
                     <td className="td">
                       <input
-                        className="input text-right tabular-nums"
+                        className="input text-right data"
                         type="number"
                         min={1}
                         step={1}
@@ -189,9 +189,9 @@ export default function NewOrderPage() {
                         onChange={(event) => setLine(index, { qty: event.target.value })}
                       />
                     </td>
-                    <td className="td text-right tabular-nums">
+                    <td className="td data text-right">
                       {product ? (
-                        <span className={short ? 'text-[#dc2626]' : undefined}>
+                        <span className={short ? 'text-flag-critical' : undefined}>
                           {formatQty(product.available_stock)}
                           {short ? ' (kurang)' : ''}
                         </span>
@@ -215,7 +215,7 @@ export default function NewOrderPage() {
             </tbody>
           </table>
         </div>
-        <div className="border-t border-[#e2e8f0] px-3 py-2">
+        <div className="border-t border-line px-3 py-2">
           <button type="button" className="btn" onClick={() => setLines([...lines, BLANK])}>
             Tambah Item
           </button>
@@ -225,7 +225,7 @@ export default function NewOrderPage() {
       {errors.length > 0 ? (
         <div
           role="alert"
-          className="card border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[#b91c1c]"
+          className="card border-flag-critical bg-surface px-3 py-2 text-flag-critical"
         >
           <ul className="list-disc pl-4">
             {errors.map((issue) => (
@@ -235,7 +235,7 @@ export default function NewOrderPage() {
         </div>
       ) : null}
 
-      <p className="text-sm text-[#475569]">
+      <p className="text-sm text-ink-muted">
         Order akan disimpan sebagai DRAFT. Stok dikunci saat status diubah ke RESERVED, dan
         dilepas otomatis bila tidak diproses dalam 60 menit.
       </p>

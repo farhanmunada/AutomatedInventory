@@ -7,11 +7,11 @@ import { cn } from '@/lib/cn';
 type Tone = 'neutral' | 'primary' | 'warning' | 'success' | 'destructive';
 
 const TONE_STYLE: Record<Tone, string> = {
-  neutral: 'bg-[#f1f5f9] text-[#475569] border-[#e2e8f0]',
-  primary: 'bg-[#eef2ff] text-[#1e40af] border-[#c7d2fe]',
-  warning: 'bg-[#fffbeb] text-[#92400e] border-[#fde68a]',
-  success: 'bg-[#f0fdf4] text-[#15803d] border-[#bbf7d0]',
-  destructive: 'bg-[#fef2f2] text-[#b91c1c] border-[#fecaca]',
+  neutral: 'bg-paper text-ink-muted border-line',
+  primary: 'bg-surface text-ink border-ink',
+  warning: 'bg-surface text-flag-warn border-flag-warn',
+  success: 'bg-surface text-flag-ok border-flag-ok',
+  destructive: 'bg-surface text-flag-critical border-flag-critical',
 };
 
 export const STATUS_TONE: Record<OrderStatus, Tone> = {
@@ -34,7 +34,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-block rounded-sm border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap',
+        'data inline-block rounded-none border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap',
         TONE_STYLE[tone],
         className,
       )}

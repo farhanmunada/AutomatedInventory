@@ -13,6 +13,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { TableSkeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ApiException } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { deleteProduct, listProducts } from '@/lib/endpoints';
 import { formatQty } from '@/lib/format';
 
@@ -57,7 +58,7 @@ export default function ProductsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Produk</h1>
+        <h1 className="page-title">Produk</h1>
         <button
           type="button"
           className="btn btn-primary"
@@ -128,7 +129,7 @@ export default function ProductsPage() {
         {query.isPending ? (
           <TableSkeleton cols={6} />
         ) : rows.length === 0 ? (
-          <p className="px-3 py-8 text-[#475569]">
+          <p className="px-3 py-8 text-ink-muted">
             {search
               ? `Tidak ada produk yang cocok dengan "${search}".`
               : 'Belum ada produk. Tambahkan produk pertama Anda.'}
@@ -147,21 +148,27 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody className={query.isFetching ? 'opacity-60' : undefined}>
-                {rows.map((product) => (
-                  <tr key={product.id} className="row-alt">
+                {rows.map((product) => {
+                  const critical = product.available_stock <= 0;
+                  const warn = !critical && product.available_stock <= product.min_buffer_stock;
+                  return (
+                  <tr
+                    key={product.id}
+                    className={cn('row', critical && 'row-critical', warn && 'row-warn')}
+                  >
                     <td className="td">
                       <Link
                         href={`/products/${product.id}`}
-                        className="text-[#1e40af] hover:underline"
+                        className="data text-ink underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink"
                       >
                         {product.sku}
                       </Link>
                     </td>
                     <td className="td">{product.name}</td>
-                    <td className="td text-right tabular-nums">
+                    <td className="td td-figure text-right data">
                       {formatQty(product.available_stock)}
                     </td>
-                    <td className="td text-right tabular-nums">
+                    <td className="td text-right data text-ink-muted">
                       {formatQty(product.min_buffer_stock)}
                     </td>
                     <td className="td">
@@ -195,7 +202,8 @@ export default function ProductsPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -235,7 +243,7 @@ export default function ProductsPage() {
         <p>
           Hapus <strong>{pendingDelete?.sku}</strong>? Tindakan ini tidak bisa dibatalkan.
         </p>
-        <p className="text-[#475569]">
+        <p className="text-ink-muted">
           Produk hanya bisa dihapus jika stoknya nol dan tidak pernah dipakai pada lot atau pesanan.
         </p>
         <Badge tone="destructive">Penghapusan permanen</Badge>
