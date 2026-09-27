@@ -15,6 +15,10 @@ export const ORDER_CHANNEL = {
 
 export type OrderChannel = (typeof ORDER_CHANNEL)[keyof typeof ORDER_CHANNEL];
 
+/**
+ * Allowed status transitions. Enforcement happens in the order service;
+ * the table below is the single source of truth for the rule.
+ */
 export const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   DRAFT: ['RESERVED', 'CANCELLED'],
   RESERVED: ['PACKED', 'CANCELLED'],
@@ -23,7 +27,8 @@ export const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   CANCELLED: [],
 };
 
+/** Draft orders older than this are auto-cancelled and their stock released. */
 export const AUTO_RELEASE_TIMEOUT_MS = 60 * 60 * 1000;
-export const LOW_STOCK_CHECK_MS = 5 * 60 * 1000;
-export const STOCK_CACHE_KEY = 'inventory:stock';
-export const LOW_STOCK_CACHE_KEY = 'alerts:low-stock';
+
+/** Interval of the low-stock scan cron job. */
+export const LOW_STOCK_CHECK_INTERVAL_MS = 5 * 60 * 1000;

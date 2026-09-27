@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedError } from '../../core/errors/app-error';
+import { InvalidCredentialsError } from '../../core/errors/app-error';
 import { UsersRepository } from './users.repository';
 
 const BCRYPT_ROUNDS = 10;
@@ -20,12 +20,12 @@ export class UsersService {
     const user = await this.usersRepository.findByUsername(username);
 
     if (!user) {
-      throw new UnauthorizedError('Username atau password salah.');
+      throw new InvalidCredentialsError();
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
-      throw new UnauthorizedError('Username atau password salah.');
+      throw new InvalidCredentialsError();
     }
 
     const access_token = await this.jwtService.signAsync({

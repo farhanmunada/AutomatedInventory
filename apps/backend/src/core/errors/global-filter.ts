@@ -62,7 +62,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         statusCode: status,
         body: {
           error: {
-            code: exception.name.replace('Exception', '').toUpperCase(),
+            code: status === 400 ? 'VALIDATION_ERROR' : exception.name.replace('Exception', '').toUpperCase(),
             message: Array.isArray(message) ? message.join(', ') : (message ?? exception.message),
           },
         },

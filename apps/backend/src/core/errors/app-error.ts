@@ -32,8 +32,26 @@ export class ValidationError extends AppError {
   }
 }
 
+export class NotFoundAppError extends AppError {
+  constructor(message: string, code = 'NOT_FOUND') {
+    super(404, message, code);
+  }
+}
+
+export class ConflictAppError extends AppError {
+  constructor(message: string, code: string) {
+    super(409, message, code);
+  }
+}
+
 export class UnauthorizedError extends AppError {
   constructor(message = 'Akses tidak diizinkan') {
     super(401, message, 'UNAUTHORIZED');
+  }
+}
+
+export class InvalidCredentialsError extends AppError {
+  constructor() {
+    super(401, 'Username atau password salah.', 'INVALID_CREDENTIALS');
   }
 }

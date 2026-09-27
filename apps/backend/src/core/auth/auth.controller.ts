@@ -1,6 +1,7 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { IsString, MinLength } from 'class-validator';
 import { UsersService } from '../../modules/users/users.service';
+import { LoginRateLimitGuard } from './login-rate-limit.guard';
 import { Public } from './public.decorator';
 
 class LoginRequestDto {
@@ -18,6 +19,7 @@ export class AuthController {
   constructor(private readonly usersService: UsersService) {}
 
   @Public()
+  @UseGuards(LoginRateLimitGuard)
   @Post('login')
   @HttpCode(200)
   async login(@Body() dto: LoginRequestDto) {

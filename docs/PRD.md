@@ -45,10 +45,10 @@ Membangun dashboard terpusat yang:
 | G1 | Mencegah overselling antar kanal Web Store & POS | **Zero oversell** pada uji konkurensi 10+ order paralel terhadap produk yang sama |
 | G2 | Alokasi stok otomatis dari batch tertua (FIFO) | Alokasi 100% sesuai urutan `received_at ASC`; verifikasi via `order_item_allocations` |
 | G3 | Rollback stok otomatis saat order dibatalkan | `available_qty` di `inventory_lots` kembali dalam ≤ 1 detik setelah status `CANCELLED` |
-| G4 | Auto-release pesanan RESERVED yang stagnan | Order dibatalkan & stok dikembalikan dalam ≤ 65 menit (60 menit timeout + toleransi worker) |
+| G4 | Auto-release pesanan RESERVED yang stagnan | Order dibatalkan & stok dikembalikan dalam ≤ 61 menit (60 menit timeout + interval scan 1 menit) |
 | G5 | Peringatan stok rendah | Alert terdeteksi ≤ 5 menit setelah stok menyentuh `min_buffer_stock` |
 | G6 | Valuasi stok FIFO real-time | Total valuasi = `SUM(purchase_price × available_qty)` per lot; response ≤ 200ms |
-| G7 | Dashboard stok real-time | Latency read stok ≤ 50ms (dari Redis cache) |
+| G7 | Dashboard stok real-time | Latency read stok ≤ 200ms (query DB terindeks, tanpa cache terpisah) |
 | G8 | CRUD lengkap produk, lot, order via UI | Semua 7 halaman fungsional end-to-end |
 
 ### 2.2 Non-Goals (Out-of-Scope) — EKSPLISIT TIDAK DIBUAT di v1
@@ -168,7 +168,7 @@ Membangun dashboard terpusat yang:
 - **Kriteria 3.1.1:**
   - **GIVEN** produk `SKU-001` sudah ada
   - **WHEN** mengirim `POST /api/lots` dengan `{ product_id, purchase_price: 50000, initial_qty: 100, received_at: "2026-09-27T09:00:00Z" }`
-  - **THEN** response `201`, lot baru dibuat dengan `available_qty = 100`, `initial_qty = 100`, dan stok cache Redis untuk produk tersebut bertambah `100`
+  - **THEN** response `201`, lot baru dibuat dengan `available_qty = 100`, `initial_qty = 100`, dan total stok tersedia produk bertambah `100`
 
 - **Kriteria 3.1.2:**
   - **GIVEN** lot diterima dengan `received_at = 2026-09-27`
@@ -242,10 +242,10 @@ Membangun dashboard terpusat yang:
   - **WHEN** mengirim `PATCH /api/orders/:id/status` → `RESERVED`
   - **THEN** response `409` dengan `error.code = "INVALID_TRANSITION"` dan status order tidak berubah
 
-- **Kriteria 5.1.5 (Cache terupdate):**
+- **Kriteria 5.1.5 (Konsistensi stok terderive):**
   - **GIVEN** order berhasil direservasi, mengurangi 3 unit `SKU-001`
   - **WHEN** reservasi selesai
-  - **THEN** Redis `HGET inventory:stock <sku-001-id>` berkurang 3 dalam ≤ 1 detik
+  - **THEN** `GET /api/products/:id` langsung menampilkan `available_stock` berkurang 3 (satu-satunya sumber angka adalah `inventory_lots`, tidak ada cache terpisah yang bisa drift)
 
 #### Story 5.2: Packing (RESERVED → PACKED)
 > Sebagai warehouse operator, saya ingin menandai order sudah dipacking agar jadwal pengiriman bisa dimulai.
@@ -274,17 +274,17 @@ Membangun dashboard terpusat yang:
 - **Kriteria 5.4.1 (Rollback dari RESERVED):**
   - **GIVEN** order `RESERVED` dengan alokasi: Lot-A = 10, Lot-B = 2 untuk `SKU-001`
   - **WHEN** status diubah ke `CANCELLED`
-  - **THEN** `available_qty` Lot-A bertambah 10, Lot-B bertambah 2, seluruh record `order_item_allocations` untuk order ini **dihapus**, Redis cache `SKU-001` bertambah 12
+  - **THEN** `available_qty` Lot-A bertambah 10, Lot-B bertambah 2, seluruh record `order_item_allocations` untuk order ini **dihapus**
 
 - **Kriteria 5.4.2 (Rollback dari PACKED):**
   - **GIVEN** order `PACKED` dengan alokasi 5 unit dari Lot-C
   - **WHEN** status diubah ke `CANCELLED`
-  - **THEN** `available_qty` Lot-C bertambah 5, alokasi dihapus, cache diupdate
+  - **THEN** `available_qty` Lot-C bertambah 5, alokasi dihapus
 
 - **Kriteria 5.4.3 (DRAFT cancel tanpa efek stok):**
   - **GIVEN** order `DRAFT` (belum ada alokasi)
   - **WHEN** status diubah ke `CANCELLED`
-  - **THEN** status menjadi `CANCELLED`, **tidak ada** perubahan di `inventory_lots` atau Redis
+  - **THEN** status menjadi `CANCELLED`, **tidak ada** perubahan di `inventory_lots`
 
 - **Kriteria 5.4.4 (SHIPPED tidak bisa dibatalkan):**
   - **GIVEN** order berstatus `SHIPPED`
@@ -292,13 +292,15 @@ Membangun dashboard terpusat yang:
   - **THEN** response `409 INVALID_TRANSITION` — stok sudah final dikeluarkan
 
 - **Kriteria 5.4.5 (Idempotensi rollback):**
-  - **GIVEN** worker auto-release menjalankan rollback untuk order yang **sudah** `CANCELLED` oleh user
-  - **WHEN** worker mengeksekusi `UPDATE ... WHERE status = 'RESERVED'`
-  - **THEN** `affected rows = 0`, worker skip tanpa error, stok tidak dobel-dikembalikan
+  - **GIVEN** scheduler auto-release memproses rollback untuk order yang **sudah** `CANCELLED` oleh user
+  - **WHEN** scheduler mencoba transisi `RESERVED → CANCELLED` secara kondisional
+  - **THEN** affected rows = 0, scheduler skip tanpa error, stok tidak dobel-dikembalikan
 
 ---
 
-### 3.6 Modul Background Workers
+### 3.6 Modul Background Jobs (DB-backed scheduler)
+
+> **Catatan implementasi:** scheduler dijalankan `@nestjs/schedule` (cron in-process) dengan scan berbasis DB, bukan antrean Redis/BullMQ. Semua kriteria di bawah tetap berlaku karena idempotensi dijamin oleh update kondisional pada baris `orders`.
 
 #### Story 6.1: Auto-Release Pesanan Stagnan
 > Sebagai inventory manager, saya ingin order RESERVED yang tidak diproses dalam 60 menit otomatis dibatalkan agar stok tidak tersangkut phantom.
@@ -306,35 +308,35 @@ Membangun dashboard terpusat yang:
 - **Kriteria 6.1.1 (Trigger timeout):**
   - **GIVEN** order masuk status `RESERVED` pada pukul 10:00:00
   - **WHEN** waktu menunjukkan 11:00:00 dan order masih `RESERVED`
-  - **THEN** BullMQ job `auto-release` dieksekusi, status → `CANCELLED`, stok dikembalikan
+  - **THEN** scan berikutnya (interval 1 menit) membatalkan order → status `CANCELLED`, stok dikembalikan
 
-- **Kriteria 6.1.2 (Job dibatalkan jika sudah diproses):**
-  - **GIVEN** order `RESERVED` dengan delayed job aktif
-  - **WHEN** user mengubah status ke `PACKED` pada menit ke-30
-  - **THEN** delayed job `auto-release` untuk order tersebut **dihapus** dari queue (`job.remove()`), tidak akan dieksekusi
+- **Kriteria 6.1.2 (Order yang sudah diproses tidak disentuh):**
+  - **GIVEN** order `RESERVED` yang kemudian diubah user menjadi `PACKED` pada menit ke-30
+  - **WHEN** scan auto-release berjalan setelah lewat 60 menit
+  - **THEN** order tidak dibatalkan — scan hanya mengambil baris dengan `status = 'RESERVED'`
 
-- **Kriteria 6.1.3 (Idempotensi duplikasi job):**
-  - **GIVEN** sistem mencoba menambah job `auto-release` untuk order yang sama 2x
-  - **WHEN** job kedua ditambahkan
-  - **THEN** BullMQ menolak (jobId `auto-release-${orderId}` sudah ada), hanya 1 job aktif
+- **Kriteria 6.1.3 (Aman terhadap eksekusi ganda):**
+  - **GIVEN** dua instance scheduler (atau scan berurutan) mencoba memproses order `RESERVED` yang sama
+  - **WHEN** keduanya mengeksekusi rollback
+  - **THEN** hanya satu yang berhasil mengembalikan stok — baris `orders` dikunci `FOR UPDATE` dan status diperiksa ulang di dalam transaksi, sehingga eksekusi kedua tidak menemukan alokasi untuk dikembalikan
 
-- **Kriteria 6.1.4 (Worker restart aman):**
+- **Kriteria 6.1.4 (Restart aman):**
   - **GIVEN** server di-restart setelah order sudah `RESERVED`
   - **WHEN** server kembali online
-  - **THEN** reconciliation scan di startup mendeteksi order RESERVED yang sudah lewat timeout dan memprosesnya
+  - **THEN** scan berjalan saat startup (`onApplicationBootstrap`), mendeteksi order `RESERVED` yang sudah lewat timeout dan memprosesnya tanpa perlu state antrean yang dipulihkan
 
 #### Story 6.2: Low Stock Alert
-> Sebagai inventory manager, saya ingin diberi peringatan saat produk menyentung batas stok minimum agar bisa segera order ulang.
+> Sebagai inventory manager, saya ingin diberi peringatan saat produk menyentuh batas stok minimum agar bisa segera order ulang.
 
 - **Kriteria 6.2.1 (Deteksi):**
   - **GIVEN** produk `SKU-003` memiliki `min_buffer_stock = 20` dan total `available_qty` turun ke `20`
-  - **WHEN** scheduled job `low-stock-check` berjalan (setiap 5 menit)
-  - **THEN** produk `SKU-003` masuk ke daftar low stock, muncul badge di Dashboard dalam ≤ 5 menit
+  - **WHEN** `GET /api/dashboard/low-stock` dipanggil (halaman Dashboard melakukan polling)
+  - **THEN** produk `SKU-003` masuk ke daftar low stock dan muncul badge di Dashboard dalam ≤ 5 menit
 
 - **Kriteria 6.2.2 (Sudah di bawah buffer):**
-  - **GIVEN** produk `SKU-003` stoknya `5` (di bawah `min_buffer_stock = 20`) dan sudah ada di daftar alert
-  - **WHEN** job berjalan lagi
-  - **THEN** produk tetap di daftar (idempotent, tidak duplikat), indikator tidak hilang sampai stok naik di atas buffer
+  - **GIVEN** produk `SKU-003` stoknya `5` (di bawah `min_buffer_stock = 20`) dan sudah muncul di daftar alert
+  - **WHEN** endpoint dipanggil lagi
+  - **THEN** produk tetap muncul sekali (dihitung dari stok saat ini, tidak ada penumpukan alert duplikat), indikator hilang hanya setelah stok naik di atas buffer
 
 ---
 
@@ -348,15 +350,15 @@ Membangun dashboard terpusat yang:
   - **WHEN** membuka Dashboard
   - **THEN** valuasi `SKU-001` = `(50000 × 10) + (55000 × 5)` = `775.000`, dan total valuasi = jumlah seluruh produk
 
-- **Kriteria 7.1.2 (Read dari cache):**
+- **Kriteria 7.1.2 (Konsistensi read):**
   - **GIVEN** Dashboard menampilkan stok 50 unit untuk `SKU-001`
-  - **WHEN** ada order baru mengalokasikan 3 unit
-  - **THEN** Dashboard menampilkan `47` setelah refresh/reload (dari Redis cache, latency ≤ 50ms)
+  - **WHEN** ada order baru mengalokasikan 3 unit lalu dashboard di-refresh
+  - **THEN** Dashboard menampilkan `47` — angka dibaca langsung dari agregasi `inventory_lots` (tidak ada cache yang bisa tertinggal)
 
 - **Kriteria 7.1.3 (Endpoint valuasi):**
   - **GIVEN** data stok di database
   - **WHEN** memanggil `GET /api/dashboard/stock-valuation`
-  - **THEN** response `200` berisi array `{ product_id, sku, name, total_qty, valuation }` diurutkan descending by `valuation`, response ≤ 200ms
+  - **THEN** response `200` berisi array `{ product_id, sku, name, total_qty, total_value }` diurutkan descending by `total_value`, response ≤ 200ms
 
 #### Story 7.2: Statistik Order
 > Sebagai sales manager, saya ingin melihat distribusi order per status & kanal agar tahu performa penjualan.
@@ -374,22 +376,22 @@ Membangun dashboard terpusat yang:
 
 | Area | Metrik |
 |---|---|
-| Read stok (Redis cache) | p95 ≤ 50ms |
+| Read stok (agregasi DB terindeks) | p95 ≤ 200ms |
 | Endpoint valuasi stok | p95 ≤ 200ms |
 | Konkurensi alokasi stok | Mendukung ≥ 50 order paralel tanpa deadlock |
-| Auto-release | Eksekusi dalam ≤ 65 menit setelah timeout |
+| Auto-release | Eksekusi dalam ≤ 61 menit setelah timeout |
 | Low stock detection | ≤ 5 menit setelah stok menyentuh buffer |
 | Pagination API | Default 20/baris, maks 100 |
 
 ### 4.2 Batasan Keamanan
 
-- Autentikasi JWT wajib di **semua** endpoint kecuali `POST /api/auth/login`.
+- Autentikasi JWT wajib di **semua** endpoint kecuali `POST /api/auth/login` (dijaga `APP_GUARD` global + `@Public()`).
 - Password di-hash bcrypt (cost factor 10). Dilarang plaintext.
 - Token JWT expired dalam 24 jam.
 - Rate limiting: maks 10 percobaan login per IP per menit.
 - Input validation via `class-validator` di semua endpoint (`whitelist: true`, `forbidNonWhitelisted: true`).
 - Dilarang expose `password_hash` atau token internal di response API (output DTO terpisah).
-- Secret (`DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`) hanya di `.env`, yang diproteksi `.gitignore`.
+- Secret (`DATABASE_URL`, `JWT_SECRET`) hanya di `.env`, yang diproteksi `.gitignore`.
 
 ### 4.3 Target Environment
 
@@ -398,7 +400,7 @@ Membangun dashboard terpusat yang:
 | Backend | Node.js 20 LTS + NestJS, long-running server |
 | Frontend | Next.js App Router, browser modern (Chrome/Edge/Firefox/Safari 2 versi terakhir) |
 | Database | PostgreSQL via Neon DB (pooled connection untuk app, unpooled untuk migrasi) |
-| Queue & Cache | Redis 7+ (BullMQ + cache HASH) |
+| Background jobs | `@nestjs/schedule` cron in-process (scan berbasis DB, tanpa Redis/BullMQ) |
 | OS Development | Windows (PowerShell) — dilarang chaining POSIX `&&` |
 | Resolusi minimum | 1280×720 (dashboard desktop), responsive hingga mobile 375px |
 
@@ -637,7 +639,7 @@ Dropdown status hanya menampilkan transisi valid (mis. dari RESERVED: `PACKED`, 
 
 | Method | Path | Deskripsi | Response |
 |---|---|---|---|
-| `GET` | `/api/dashboard/stock-summary` | Total stok per produk (dari Redis) | `StockSummaryDto[]` |
+| `GET` | `/api/dashboard/stock-summary` | Total stok per produk (agregasi `inventory_lots`) | `StockSummaryDto[]` |
 | `GET` | `/api/dashboard/stock-valuation` | Valuasi FIFO per produk | `ValuationDto[]` |
 | `GET` | `/api/dashboard/low-stock` | Produk di bawah `min_buffer_stock` | `LowStockDto[]` |
 | `GET` | `/api/dashboard/order-stats` | Jumlah order per status & channel | `OrderStatsDto` |
@@ -687,6 +689,7 @@ Dropdown status hanya menampilkan transisi valid (mis. dari RESERVED: `PACKED`, 
 | `INSUFFICIENT_STOCK` | 409 | Stok kurang dari permintaan |
 | `INVALID_TRANSITION` | 409 | Transisi status tidak valid |
 | `VALIDATION_ERROR` | 400 | Input tidak valid |
+| `RATE_LIMITED` | 429 | Melewati batas 10 percobaan login per IP per menit |
 | `INTERNAL_ERROR` | 500 | Error tak terduga |
 
 ---
@@ -706,10 +709,13 @@ Dropdown status hanya menampilkan transisi valid (mis. dari RESERVED: `PACKED`, 
 
 ### 8.2 Constraint & Indeks
 
-- `CHECK (available_qty >= 0)` — tidak boleh stok negatif.
+- `CHECK (available_qty >= 0 AND available_qty <= initial_qty)` — stok tidak boleh negatif atau melebihi jumlah awal lot.
+- `CHECK (initial_qty > 0)`, `CHECK (purchase_price >= 0)`, `CHECK (min_buffer_stock >= 0)`.
 - `CHECK (requested_qty > 0)` dan `CHECK (allocated_qty > 0)`.
 - Indeks: `inventory_lots(product_id, available_qty, received_at)` — mendukung query FIFO `WHERE product_id = ? AND available_qty > 0 ORDER BY received_at ASC FOR UPDATE`.
-- Indeks: `orders(status, created_at)` — mendukung query auto-release worker.
+- Indeks: `orders(status, created_at)` — mendukung scan auto-release.
+- Indeks pada FK `order_items(order_id, product_id)` dan `order_item_allocations(order_item_id, lot_id)` — mempercepat rollback stok.
+- Sequence `order_number_seq` → `order_number` berformat `ORD-000001`, atomik (dihentikan bila perlu nomor lebih kompleks).
 - Foreign key `ON DELETE RESTRICT` untuk mencegah hapus produk yang punya lot/order.
 
 ---
@@ -728,10 +734,10 @@ DRAFT ──▶ RESERVED ──▶ PACKED ──▶ SHIPPED      │
 
 | Dari | Ke | Efek Stok |
 |---|---|---|
-| `DRAFT` | `RESERVED` | Alokasi FIFO, kurangi `available_qty`, insert `order_item_allocations`, update Redis |
+| `DRAFT` | `RESERVED` | Alokasi FIFO, kurangi `available_qty`, insert `order_item_allocations` |
 | `RESERVED` | `PACKED` | Tidak ada (alokasi sudah dikunci) |
 | `PACKED` | `SHIPPED` | Tidak ada (final, alokasi tetap untuk audit) |
 | `DRAFT` | `CANCELLED` | Tidak ada (belum ada alokasi) |
-| `RESERVED` | `CANCELLED` | Kembalikan `allocated_qty` ke lot, hapus alokasi, update Redis, hapus delayed job |
+| `RESERVED` | `CANCELLED` | Kembalikan `allocated_qty` ke lot asal, hapus baris alokasi |
 | `PACKED` | `CANCELLED` | Sama seperti `RESERVED` → `CANCELLED` |
 | `SHIPPED` | `*` | Ditolak (final) |

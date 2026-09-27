@@ -2,7 +2,7 @@
 
 > **Versi:** 1.1
 > **Tanggal:** 2026-09-27
-> **Status:** `APPROVED` — Gerbang 2 disetujui; implementasi berjalan.
+> **Status:** `APPROVED` — Gerbang 2 disetujui. **Revisi v1.2 (2026-09-27): Redis & BullMQ DIHAPUS** atas keputusan operator. Seluruh mekanisme cache/queue/worker di dokumen ini **tidak lagi berlaku**, digantikan scan DB + cron in-process (`AutoReleaseService`). Bagian terdampak ditandai *(superseded)*; riwayat desain tetap ada. Deviasi §11. Backend Tahap 2 selesai: 64/64 assertion E2E vs Neon nyata.
 > **PRD pendukung:** `docs/PRD.md` (APPROVED)
 > **Riset pendukung:** `docs/RESEARCH.md`
 > **Catatan implementasi:** lihat §11 (Deviasi & Keputusan Saat Implementasi).
@@ -38,17 +38,21 @@
 │  └───────────────────────────┼─────────────────────────────┘  │
 └──────────────────────────────┼───────────────────────────────┘
                                │
-              ┌────────────────┼────────────────┐
-              │                │                │
-┌─────────────▼──────┐ ┌──────▼───────┐ ┌──────▼───────────────┐
-│  PostgreSQL (Neon)  │ │  Redis       │ │  BullMQ Workers      │
-│  ┌──────────────┐   │ │  ┌────────┐  │ │  ┌────────────────┐  │
-│  │ Drizzle ORM │   │ │  │ Cache: │  │ │  │ auto-release   │  │
-│  │ pg.Pool     │   │ │  │ HASH   │  │ │  │ (60 min timeout)│  │
-│  │ (pooled)    │   │ │  │        │  │ │  ├────────────────┤  │
-│  └──────────────┘   │ │  │ Queue: │  │ │  │ low-stock-check│  │
-│  Migrasi: unpooled  │ │  │ orders │  │ │  │ (every 5 min)  │  │
-└─────────────────────┘ └──────────────┘ └──────────────────────┘
+                    ┌──────────┴───────────┐
+                    │                      │
+┌─────────────▼────────────┐ ┌──────────────────────────────────┐
+│  PostgreSQL (Neon)        │ │ In-process cron (@nestjs/schedule)│
+│  ┌────────────────────┐   │ │  ┌─────────────────────────────┐ │
+│  │ Drizzle ORM        │   │ │  │ auto-release scan (1 min)   │ │
+│  │ pg.Pool (pooled)   │   │ │  │  RESERVED > 60 min          │ │
+│  │ raw Pool (FIFO tx) │   │ │  ├─────────────────────────────┤ │
+│  └────────────────────┘   │ │  │ startup reconciliation      │ │
+│  Migrasi: unpooled        │ │  │  (onApplicationBootstrap)   │ │
+│  CHECK + index + sequence │ │  └─────────────────────────────┘ │
+└───────────────────────────┘ │  Tidak ada state antrean terpisah│
+  • stok = SUM(available_qty) └──────────────────────────────────┘
+    di atas indeks produk
+  • low-stock dihitung langsung
 ```
 
 ---
@@ -67,42 +71,41 @@ automated-inventory/
 ├── apps/
 │   ├── backend/                    @repo/backend
 │   │   ├── src/
-│   │   │   ├── main.ts
+│   │   │   ├── main.ts                     (prefix /api, ValidationPipe, shutdown hooks)
 │   │   │   ├── app.module.ts
 │   │   │   ├── core/
+│   │   │   │   ├── health.controller.ts    (@Public)
 │   │   │   │   ├── config/env.ts           (Zod schema .env)
 │   │   │   │   ├── database/
-│   │   │   │   │   ├── db.module.ts        (pg.Pool provider)
-│   │   │   │   │   └── schema.ts           (Drizzle tables)
-│   │   │   │   ├── redis/redis.module.ts   (ioredis provider)
+│   │   │   │   │   ├── db.module.ts        (pg.Pool provider + OnApplicationShutdown)
+│   │   │   │   │   └── schema.ts           (Drizzle tables + CHECK + index + sequence)
 │   │   │   │   ├── errors/
 │   │   │   │   │   ├── app-error.ts
-│   │   │   │   │   └── global-filter.ts
+│   │   │   │   │   └── global-filter.ts    (BadRequest 400 -> VALIDATION_ERROR)
+│   │   │   │   ├── http/pagination.ts      (ParsePaginationQuery, maks 100)
 │   │   │   │   └── auth/
+│   │   │   │       ├── auth.module.ts      (APP_GUARD global)
+│   │   │   │       ├── auth.controller.ts  (POST /auth/login, @Public)
 │   │   │   │       ├── jwt.strategy.ts
 │   │   │   │       ├── jwt-auth.guard.ts
-│   │   │   │       └── auth.module.ts
+│   │   │   │       └── public.decorator.ts
 │   │   │   └── modules/
-│   │   │       ├── users/
-│   │   │       ├── products/
-│   │   │       ├── lots/
+│   │   │       ├── users/                  (repository + service, bcrypt compare)
+│   │   │       ├── products/               (controller/service/repository/mapper)
+│   │   │       ├── lots/                   (controller/service/repository)
 │   │   │       ├── orders/
 │   │   │       │   ├── orders.controller.ts
-│   │   │       │   ├── orders.service.ts
-│   │   │       │   ├── orders.repository.ts
-│   │   │       │   ├── dto/
-│   │   │       │   └── state-machine.ts    (transisi valid)
-│   │   │       ├── allocations/
-│   │   │       │   └── fifo.service.ts     (FOR UPDATE lock)
-│   │   │       ├── stock-cache/
-│   │   │       │   └── stock-cache.service.ts
-│   │   │       ├── workers/
-│   │   │       │   ├── orders.processor.ts (auto-release)
-│   │   │       │   └── low-stock.processor.ts
-│   │   │       └── dashboard/
+│   │   │       │   ├── orders.service.ts   (validasi + transisi status)
+│   │   │       │   ├── orders.repository.ts (FIFO FOR UPDATE, rollback atomik, nextval)
+│   │   │       │   ├── orders.mapper.ts    (DTO + agregat total)
+│   │   │       │   ├── state-machine.ts    (DRAFT->RESERVED->PACKED->SHIPPED)
+│   │   │       │   └── auto-release.service.ts (cron 1 menit + scan saat boot)
+│   │   │       └── dashboard/              (stock-summary, valuation, low-stock, order-stats)
+│   │   ├── scripts/
+│   │   │   ├── seed-admin.ts               (dijalankan via dist/scripts/seed-admin.js)
+│   │   │   └── smoke-e2e.js                (64 assertion, DB nyata, self-cleanup)
 │   │   ├── drizzle/                        (generated migrations)
 │   │   ├── drizzle.config.ts
-│   │   ├── scripts/seed-admin.ts
 │   │   └── package.json
 │   │
 │   └── frontend/                   @repo/frontend
@@ -228,104 +231,91 @@ ALTER TO inventory_lots ADD CONSTRAINT lots_qty_nonneg CHECK (available_qty >= 0
 
 ## 4. Alur Data Kritis
 
-### 4.1 Alokasi FIFO (DRAFT → RESERVED)
+### 4.1 Alokasi FIFO (DRAFT -> RESERVED)
 
 ```text
 PATCH /api/orders/:id/status { status: "RESERVED" }
-    │
-    ▼
+    |
+    v
 OrdersController (validasi DTO, JWT guard)
-    │
-    ▼
+    |
+    v
 OrdersService.transitionStatus()
-    │  ├─ cek state machine (INVALID_TRANSITION → 409)
-    │  └─ sort items by productId (deadlock prevention)
-    ▼
+    |  |-- cek state machine (INVALID_TRANSITION -> 409)
+    |  `-- sort items by product_id ASC (anti-deadlock)
+    v
 db.transaction(async (tx) => {
-    │
-    ├─ 1. SELECT lots WHERE product_id, available_qty > 0
-    │      ORDER BY received_at ASC FOR UPDATE     ← row lock
-    │
-    ├─ 2. Validasi total >= requested
-    │      (INSUFFICIENT_STOCK → rollback → 409)
-    │
-    ├─ 3. Loop FIFO: UPDATE lots SET available_qty -= deduct
-    │                INSERT order_item_allocations
-    │
-    └─ 4. UPDATE orders SET status = 'RESERVED'
+     |-- 1. SELECT lots WHERE product_id = ? AND available_qty > 0
+     |       ORDER BY received_at ASC FOR UPDATE      (row lock)
+     |
+     |-- 2. Validasi total >= requested
+     |       (INSUFFICIENT_STOCK -> ROLLBACK -> 409)
+     |
+     |-- 3. Loop FIFO: UPDATE inventory_lots SET available_qty = available_qty - deduct
+     |                INSERT order_item_allocations
+     |
+     `-- 4. UPDATE orders SET status = 'RESERVED'
 })
-    │
-    ▼ (commit DB)
-StockCacheService.adjustStock(productId, -qty)   ← HINCRBY Redis
-    │
-    ▼
-OrdersQueue.add('auto-release', { orderId }, { delay: 3600000 })
-    │
-    ▼
+     |
+     v (commit DB -> satu-satunya sumber kebenaran stok)
 Response 200
 ```
 
-**Kenapa Redis update di luar transaksi:** Holding DB lock selama operasi network Redis memperbesar window deadlock. Drift ditangani cron rekonsiliasi 5 menit.
+**Kenapa tanpa cache stok:** satu-satunya angka berasal dari `SUM(inventory_lots.available_qty)` di atas indeks `(product_id, available_qty, received_at)`. Tidak ada state kedua = tidak ada drift yang perlu direkonsiliasi.
 
-### 4.2 Rollback Stok (→ CANCELLED)
+### 4.2 Rollback Stok (-> CANCELLED)
 
 ```text
-OrdersService.transitionStatus(CANCELLED)
-    │
-    ├─ cek: status saat ini DRAFT / RESERVED / PACKED
-    │   └─ DRAFT → tidak ada rollback, langsung update status
-    │
-    ▼
+OrdersService.transitionStatus(orderId, CANCELLED)
+     |
+     +-- state-machine.ts: tolak 409 INVALID_TRANSITION jika SHIPPED/CANCELLED
+     |
+     v
 db.transaction(async (tx) => {
-    ├─ 1. SELECT allocations JOIN order_items WHERE order_id
-    │      FOR UPDATE
-    ├─ 2. UPDATE orders SET status = 'CANCELLED'
-    │      WHERE id = ? AND status IN ('RESERVED','PACKED')
-    │      (affected = 0 → skip, idempotent)
-    ├─ 3. UPDATE lots SET available_qty += allocated_qty (per lot)
-    └─ 4. DELETE order_item_allocations
+     |-- 1. SELECT ... FROM orders WHERE id = ? FOR UPDATE   (kunci baris order dulu)
+     |-- 2. UPDATE orders SET status='CANCELLED'
+     |       WHERE id = ? AND status IN ('RESERVED','PACKED')
+     |       (affected = 0 -> skip, idempotent)
+     |-- 3. UPDATE inventory_lots SET available_qty = available_qty + allocated_qty
+     |       (per alokasi, via helper `lotProductId` agar tidak kena bug Drizzle)
+     `-- 4. DELETE FROM order_item_allocations WHERE order_item_id IN (...)
 })
-    │
-    ▼ (commit)
-StockCacheService.adjustStock(productId, +qty)   ← per lot, kumpulkan
-OrdersQueue.getJob().remove()                    ← hapus delayed auto-release
+     |
+     v (commit -> selesai; tidak ada cache/queue yang perlu disinkronkan)
 ```
 
-### 4.3 Auto-Release Worker
+Seluruh rollback terjadi dalam **satu transaksi** sehingga balapan "cancel + auto-release" tidak bisa mengembalikan stok dua kali: pihak yang kalah menunggu lock `orders` dan kemudian melihat status sudah `CANCELLED`.
+
+### 4.3 Auto-Release (cron in-process)
 
 ```text
-BullMQ delayed job (delay: 60 menit)
-    │  trigger: order masuk RESERVED
-    ▼
-OrdersProcessor.handleAutoRelease({ orderId })
-    │
-    ├─ UPDATE orders SET status='CANCELLED'
-    │  WHERE id = ? AND status = 'RESERVED'     ← guard idempotency
-    │
-    ├─ affected = 0 → return (sudah diproses/dibatalkan user)
-    │
-    └─ affected = 1 → rollbackStock(orderId)    ← sama dengan 4.2
+@Cron(CRON_EVERY_MINUTE) AutoReleaseService.scanAndRelease()
+     |
+     +-- SELECT id FROM orders
+     |   WHERE status = 'RESERVED'
+     |     AND updated_at < NOW() - INTERVAL '60 minutes'
+     |
+     v
+untuk setiap orderId -> transitionStatus(CANCELLED)  [jalur yang sama dgn 4.2]
 ```
 
-**Startup reconciliation:** saat app boot, scan `SELECT id FROM orders WHERE status='RESERVED' AND created_at < NOW() - INTERVAL '60 minutes'`, proses sisanya. Melindungi job yang hilang saat restart.
+**Startup reconciliation:** `onApplicationBootstrap()` memanggil `scanAndRelease()` sekali, sehingga order yang sudah lewat timeout saat server mati tetap dilepaskan. Tidak ada state antrean yang perlu dipulihkan.
 
-### 4.4 Low Stock Check
+**Kenapa bukan BullMQ delayed job:** butuh Redis (tidak dipakai di lingkungan ini), dan delayed job hilang saat restart sehingga tetap butuh scan rekonsiliasi. Scan DB 1 menit lebih sederhana, idempoten, dan bounded (indeks `orders(status, updated_at)`).
+
+### 4.4 Low Stock
 
 ```text
-upsertJobScheduler('low-stock-check', { every: 300_000 })
-    │
-    ▼
-SELECT product_id, SUM(available_qty) AS total
-FROM inventory_lots GROUP BY product_id
-HAVING SUM(available_qty) <= min_buffer_stock
-    │
-    ▼
-Cache hasil ke Redis key 'alerts:low-stock' (TTL 10 menit)
-    │
-    ▼
-Frontend GET /api/dashboard/low-stock (baca dari cache)
+GET /api/dashboard/low-stock   (dipanggil polling oleh halaman Dashboard)
+     |
+     v
+SELECT p.id, p.sku, p.name, p.min_buffer_stock, COALESCE(SUM(l.available_qty),0) AS available
+FROM products p LEFT JOIN inventory_lots l ON l.product_id = p.id
+GROUP BY p.id HAVING COALESCE(SUM(l.available_qty),0) <= p.min_buffer_stock
+ORDER BY available ASC
 ```
 
+Tidak ada scheduler dan tidak ada key `alerts:low-stock`: daftar dihitung langsung saat dibaca sehingga selalu benar.
 ---
 
 ## 5. Layer Separation Contract
@@ -337,7 +327,7 @@ Frontend GET /api/dashboard/low-stock (baca dari cache)
 | **Repository** | Query Drizzle, mapping entity → DTO | Status HTTP, keputusan bisnis |
 | **FifoService** | Lock + deduct + insert allocation dalam tx | Dipanggil langsung dari controller |
 
-**Dependency flow:** `Controller → Service → (Repository + FifoService + StockCacheService)`
+**Dependency flow:** `Controller → Service → Repository` (FIFO ada di `OrdersRepository.reserveStock`; auto-release ada di `AutoReleaseService` yang memanggil `OrdersService`).
 
 Cross-module communication hanya via controller public API atau event. Dilarang `OrdersService` mengimpor `ProductsRepository` langsung — gunakan `ProductsService` public method.
 
@@ -356,12 +346,12 @@ Cross-module communication hanya via controller public API atau event. Dilarang 
 | `bcrypt` | auth | Password hashing |
 | `drizzle-orm` | db | ORM |
 | `pg` | db | Driver node-postgres (interactive transaction) |
-| `ioredis` | cache/queue | Redis client |
-| `@nestjs/bullmq`, `bullmq` | queue | Background workers |
 | `zod` | validation | Env schema + (frontend form schema reuse) |
 | `class-validator`, `class-transformer` | validation | NestJS DTO pipes |
-| `@nestjs/schedule` | cron | Reconciliation cron 5 menit |
+| `@nestjs/schedule` | cron | Auto-release scan tiap 1 menit |
 | **Dev:** `drizzle-kit`, `tsx`, `typescript`, `eslint` | dev | Migrasi, seed, lint |
+
+> ~~`ioredis`~~, ~~`@nestjs/bullmq`~~, ~~`bullmq`~~ — **dihapus** dari manifest (revisi v1.2). Tidak dipakai.
 
 ### 6.2 Frontend (`apps/frontend`)
 
@@ -392,8 +382,8 @@ Cross-module communication hanya via controller public API atau event. Dilarang 
 |---|---|---|---|
 | ADR-1 | `node-postgres` + `pg.Pool` | `neon-http` | HTTP driver tidak support interactive transaction (FIFO `FOR UPDATE` butuh multi-step tx) |
 | ADR-2 | Drizzle ORM | Prisma / TypeORM / raw SQL | Drizzle punya `.for()` native, type-safe, migrasi ringan |
-| ADR-3 | Redis HASH + write-through | String per-key / CDC event | Atomic `HINCRBY`, batch `HMGET`, reconciliation cron sebagai safety net |
-| ADR-4 | BullMQ jobId + DB guard | Distributed lock Redis | Idempotency 3 lapis tanpa kompleksitas lock manager |
+| ADR-3 | *(superseded v1.2)* — tanpa cache stok; angka dibaca langsung dari agregasi `inventory_lots` | Redis HASH write-through; materialized view; Redis String per-key | Satu sumber kebenaran = nol drift. Agregasi `SUM()` di atas indeks `(product_id, available_qty, received_at)` sudah di bawah batas 200ms untuk dataset MVP. Operator juga tidak memakai Redis di lingkungannya |
+| ADR-4 | *(superseded v1.2)* — auto-release via scan DB `@Cron(everyMinute)` + guard status di transaksi | BullMQ delayed job + jobId dedup | Delayed job hilang saat restart sehingga tetap butuh scan rekonsiliasi DB; scan 1 menit lebih sederhana dan idempoten lewat lock `FOR UPDATE` + update kondisional |
 | ADR-5 | Monorepo pnpm (no Turborepo) | Polyrepo / Nx / Turborepo | Ponytail — kompleksitas minimal untuk 2 app + 1 paket |
 | ADR-6 | Shadcn/ui (copy-in) | MUI / Ant Design / custom | Bebas template klise (per `skill-frontend-design`), tidak tambah dependency runtime |
 | ADR-7 | Numeric(15,2) untuk currency | double precision | Anti rounding error perhitungan keuangan |
@@ -410,50 +400,39 @@ Fase implementasi dipecah menjadi sub-tugas independen. Tiap sub-tugas = 1 unit 
 |---|---|---|---|
 | 1.1 | Setup monorepo pnpm + tsconfig base + scripts | `pnpm-workspace.yaml`, `package.json`, `tsconfig.base.json` | `pnpm install` sukses, workspace resolve |
 | 1.2 | Backend skeleton NestJS + global prefix + validation pipe + exception filter | `main.ts`, `app.module.ts`, `global-filter.ts` | `pnpm dev` jalan di :3001, `GET /api/health` 200 |
-| 1.3 | Drizzle schema + migrasi Neon + db module | `schema.ts`, `db.module.ts`, `drizzle.config.ts` | `drizzle-kit push` ke DB asli, `SELECT 1` |
-| 1.4 | Redis module + stock cache service | `redis.module.ts`, `stock-cache.service.ts` | `HSET`/`HGET` round-trip |
+| 1.3 | Drizzle schema + migrasi Neon + db module | `schema.ts`, `db.module.ts`, `drizzle.config.ts` | `drizzle-kit migrate` ke DB asli (lihat D-1), `SELECT 1` |
+| ~~1.4~~ | ~~Redis module + stock cache service~~ | — | **Dihapus (v1.2)** — tidak ada cache |
 | 1.5 | Auth module + JWT guard + seed admin script | `jwt.strategy.ts`, `scripts/seed-admin.ts` | Login 200, protected route 401 tanpa token |
 
-### Tahap 2 — Domain Core
+### Tahap 2 — Domain Core ✅ SELESAI
 | # | Sub-tugas | File Utama | Verifikasi |
 |---|---|---|---|
-| 2.1 | Products module (CRUD) | `products/*.ts` | 5 kriteria Story 2.x lulus |
-| 2.2 | Lots module (CRUD + cache sync) | `lots/*.ts` | 3 kriteria Story 3.x lulus |
-| 2.3 | Orders module + state machine | `orders/state-machine.ts`, `orders.service.ts` | Transisi valid/invalid (5.1.4) |
-| 2.4 | FIFO allocation service | `allocations/fifo.service.ts` | Kriteria 5.1.1 + 5.1.2 |
-| 2.5 | Rollback stok (cancel) | `orders.service.ts` | Kriteria 5.4.1–5.4.5 |
+| 2.1 | Products module (CRUD + stok terderive) | `products/*.ts` | ✅ Kriteria 2.1.1–2.1.4 lulus (smoke-e2e) |
+| 2.2 | Lots module (CRUD + guard edit) | `lots/*.ts` | ✅ Kriteria 3.1.1–3.1.3 lulus |
+| 2.3 | Orders module + state machine | `orders/state-machine.ts`, `orders.service.ts` | ✅ Kriteria 4.x, 5.1.4, 5.4.4 lulus |
+| 2.4 | FIFO allocation + anti-oversell | `orders.repository.ts` (`reserveStock`) | ✅ Kriteria 5.1.1–5.1.3 + konkurensi 10 paralel (G1) lulus |
+| 2.5 | Rollback stok (cancel atomik) | `orders.repository.ts` (`cancelWithRollback`) | ✅ Kriteria 5.4.1–5.4.3 lulus |
+| 2.6 | Dashboard API (stock-summary, valuation, low-stock, order-stats) | `dashboard/*.ts` | ✅ Kriteria 7.1.1, 7.1.3, 7.2.1 lulus |
+| 2.7 | Auto-release cron + reconciliation boot | `orders/auto-release.service.ts` | ✅ Kriteria 6.1.1–6.1.4 (scan DB, tanpa queue) |
 
-### Tahap 3 — Background Workers
+### Tahap 3 — Frontend (berjalan)
 | # | Sub-tugas | File Utama | Verifikasi |
 |---|---|---|---|
-| 3.1 | BullMQ queue module + auto-release processor | `workers/orders.processor.ts` | Kriteria 6.1.1–6.1.4 |
-| 3.2 | Low stock check scheduler + cache | `workers/low-stock.processor.ts` | Kriteria 6.2.1–6.2.2 |
-| 3.3 | Reconciliation cron (cache drift + startup scan) | `stock-cache.service.ts` | Redis di-corrupt → sembuh ≤ 5 menit |
+| 3.1 | Next.js skeleton + shadcn init + API client + auth flow | `app/(auth)/login/`, `lib/api.ts`, `features/auth/` | Login redirect ke dashboard |
+| 3.2 | Shared layout + TanStack Query provider | `app/(dashboard)/layout.tsx` | Persist token, logout |
+| 3.3 | Dashboard page | `features/dashboard/` | Kriteria 7.1.1, 7.2.1 di UI |
+| 3.4 | Products list + detail | `features/products/` | Kriteria 2.1.1–2.1.4 |
+| 3.5 | Lots list + create form | `features/lots/` | Kriteria 3.x |
+| 3.6 | Orders list + detail + status action | `features/orders/` | Kriteria 5.x di UI |
+| 3.7 | Create order form (multi-item) | `features/orders/new/` | Kriteria 4.1.1–4.1.3 |
 
-### Tahap 4 — Dashboard API
-| # | Sub-tugas | File Utama | Verifikasi |
-|---|---|---|---|
-| 4.1 | Stock summary + valuation endpoints | `dashboard/*.ts` | Kriteria 7.1.1, 7.1.3 |
-| 4.2 | Order stats + low stock endpoints | `dashboard/*.ts` | Kriteria 7.2.1 |
-
-### Tahap 5 — Frontend
-| # | Sub-tugas | File Utama | Verifikasi |
-|---|---|---|---|
-| 5.1 | Next.js skeleton + shadcn init + auth flow | `app/(auth)/login/`, `features/auth/` | Login redirect ke dashboard |
-| 5.2 | Shared layout + TanStack Query provider | `app/(dashboard)/layout.tsx` | Persist token, logout |
-| 5.3 | Dashboard page | `features/dashboard/` | Kriteria 7.1.1, 7.2.1 di UI |
-| 5.4 | Products list + detail | `features/products/` | Kriteria 2.1.1–2.1.4 |
-| 5.5 | Lots list + create form | `features/lots/` | Kriteria 3.x |
-| 5.6 | Orders list + detail + status action | `features/orders/` | Kriteria 5.x di UI |
-| 5.7 | Create order form (multi-item) | `features/orders/new/` | Kriteria 4.1.1–4.1.3 |
-
-### Tahap 6 — Verifikasi & Seal
+### Tahap 4 — Verifikasi & Seal
 | # | Sub-tugas | Verifikasi |
 |---|---|---|
-| 6.1 | Concurrency test (10 order paralel) | Zero oversell (G1) |
-| 6.2 | Full regression + typecheck + lint | `pnpm -r exec tsc --noEmit` 0 error |
-| 6.3 | Production build | `pnpm build` sukses |
-| 6.4 | Dokumentasi sync + commit final | `docs/` up-to-date |
+| 4.1 | Concurrency test (10 order paralel) | Zero oversell (G1) — ✅ lulus di smoke-e2e |
+| 4.2 | Full regression + typecheck + lint | `pnpm -r exec tsc --noEmit` 0 error |
+| 4.3 | Production build | `pnpm build` sukses |
+| 4.4 | Dokumentasi sync + commit final | `docs/` up-to-date |
 
 ---
 
@@ -461,10 +440,10 @@ Fase implementasi dipecah menjadi sub-tugas independen. Tiap sub-tugas = 1 unit 
 
 | Risiko | Probabilitas | Mitigasi |
 |---|---|---|
-| Deadlock saat alokasi multi-produk konkuren | Sedang | Sort `productId` ASC sebelum lock; lock window kecil (`available_qty > 0` saja) |
-| Redis drift dari DB | Rendah | Rekonsiliasi cron 5 menit + warm-up boot |
+| Deadlock saat alokasi multi-produk konkuren | Sedang | Sort `product_id` ASC sebelum lock; lock per lot `FOR UPDATE ... ORDER BY received_at`; diverifikasi 10 order paralel |
+| Scan auto-release membebani DB | Rendah | Query terindeks `orders(status, updated_at)`, interval 1 menit, hasil dibatasi; upgrade path = `LISTEN/NOTIFY` atau queue bila volume naik |
+| Agregasi stok melambat saat dataset besar | Rendah | Indeks `(product_id, available_qty, received_at)`; upgrade path = materialized view / kolom cache di `products` |
 | Neon cold start di migrasi | Rendah | Unpooled connection untuk Drizzle Kit; retry 1x |
-| Delayed job hilang saat restart | Sedang | Startup reconciliation scan order RESERVED kedaluwarsa |
 | Hydration mismatch timestamp frontend | Sedang | `Intl.DateTimeFormat` dengan `timeZone: 'Asia/Jakarta'` eksplisit |
 | Scope creep | Sedang | Non-Goals eksplisit (10 butir) di PRD |
 
@@ -492,10 +471,17 @@ Perubahan terhadap rencana awal, dicatat sebagai memori persisten.
 | D-4 | Format `JWT_EXPIRES_IN` | string `'24h'` | number detik (`86400`) | `@nestjs/jwt` v11 butuh tipe `StringValue` dari `ms`; number menghindari dependency tipe tambahan |
 | D-5 | Secret loader | `@nestjs/config` saja | `env.ts` memuat root `.env` via `dotenv`; `@nestjs/config` tetap aktif | `env` divalidasi di module-scope sebelum `ConfigModule` init; `.env` berada di root monorepo |
 | D-6 | Approval build script pnpm 12 | `pnpm.onlyBuiltDependencies` (package.json) | `allowBuilds` di `pnpm-workspace.yaml` | pnpm ≥ 11 mengganti mekanisme approval build script |
-| D-7 | Lifecycle shutdown | tidak dispesifikasi | `OnApplicationShutdown` di `DbModule` (`pool.end`) & `RedisModule` (`disconnect`) + `app.enableShutdownHooks()` | Tanpa ini, seed/CLI script menggantung (open handle) |
-| D-8 | Guard JWT | disebut di riset | `APP_GUARD` global + `@Public()` decorator | PRD §(autentikasi) mensyaratkan semua endpoint terlindungi kecuali login |
-| D-9 | Redis provisioning | diasumsikan lokal | `REDIS_URL` ATAU `REDIS_HOST/PORT`; boot tetap sukses tanpa Redis (degradasi cache + warning) | Belum ada Redis lokal/Docker di mesin dev |
+| D-7 | Lifecycle shutdown | tidak dispesifikasi | `OnApplicationShutdown` di `DbModule` (`pool.end`) + `app.enableShutdownHooks()` | Tanpa ini, seed/CLI script menggantung (open handle) |
+| D-8 | Guard JWT | disebut di riset | `APP_GUARD` global + `@Public()` decorator | PRD §4.2 mensyaratkan semua endpoint terlindungi kecuali login |
+| D-9 | ~~Redis provisioning~~ | diasumsikan lokal | **Redis & BullMQ dihapus total** dari projek | Operator tidak memakai Redis ("yang penting jadi dulu"); agregasi DB terindeks sudah memenuhi target ≤ 200ms, sehingga cache tidak memberi nilai |
 | D-10 | Constraint integritas | hanya FK/unique | + CHECK constraints (`available_qty` range, qty positif, harga ≥ 0) & index FK | Invariant stok harus dijaga di DB, bukan hanya di service layer |
+| D-11 | Auto-release | BullMQ delayed job 60 menit | `@Cron(EVERY_MINUTE)` scan `status='RESERVED' AND updated_at < now()-60min` + scan sekali saat `onApplicationBootstrap` | Tanpa queue tetap memenuhi G4 (≤ 61 menit) dan restart-proof |
+| D-12 | Low-stock | scheduler 5 menit + cache key | dihitung on-demand oleh `GET /api/dashboard/low-stock`; frontend polling | Menghilangkan 1 cron + 1 state; hasil selalu benar |
+| D-13 | Nomor order | `count(*)`/uuid | sequence PostgreSQL `order_number_seq` → `ORD-%06d` | Atomik di bawah konkurensi tanpa tabel pembantu |
+| D-14 | `nextval` via Drizzle | `sql`nextval(...)`` pada query builder | raw `pool.query('SELECT nextval(...)')` | Drizzle 0.39 me-render objek sequence sebagai JSON → `nextval(integer)` error |
+| D-15 | Stok per produk (list) | correlated subquery di `select()` | `LEFT JOIN` ke derived table `stockByProduct()` | Drizzle 0.39 me-render `"id"` subquery tanpa kualifikasi → resolve ke scope dalam → stok selalu `0` (bug senyap) |
+| D-16 | Seed admin | `tsx scripts/seed-admin.ts` | `nest build` + `node dist/scripts/seed-admin.js` | esbuild/tsx tidak meng-emit `emitDecoratorMetadata` → DI NestJS rusak |
+| D-17 | Rate limiting login | tidak dispesifikasi detail | `LoginRateLimitGuard` (Map in-memory, sliding window 10/menit/IP) + `@Public()` | PRD §4.2 mewajibkan; tanpa Redis, store bersama tidak tersedia. Skala >1 instance → pindahkan ke store bersama |
 
 ### Status Verifikasi Tahap 1
 
@@ -504,5 +490,22 @@ Perubahan terhadap rencana awal, dicatat sebagai memori persisten.
 | 1.1 Monorepo pnpm | ✅ | `pnpm install` sukses; `allowBuilds` aktif; `bcrypt` native binding terpasang |
 | 1.2 Skeleton NestJS | ✅ | Build bersih; `GET /api/health` → `200` |
 | 1.3 Drizzle schema + migrasi | ✅ Tier 2 | 6 tabel, 2 enum, PK/FK/CHECK/index ter-apply di Neon; smoke test 8 asersi lulus lalu `ROLLBACK` bersih |
-| 1.4 Redis module + stock cache | ⚠️ Parsial | Modul + lifecycle selesai; smoke test nyata menunggu Redis tersedia |
+| ~~1.4 Redis module + stock cache~~ | ➖ Batal | Dihapus sesuai keputusan operator (D-9) |
 | 1.5 Auth + JWT + seed | ✅ | `POST /api/auth/login` → `200` + `access_token` + `user`; password salah → `401`; seed admin idempoten |
+
+### Status Verifikasi Tahap 2 (backend domain + background jobs)
+
+Runner: `pnpm --filter @repo/backend test` → `node scripts/smoke-e2e.js`.
+Server diboot nyata di `:3999`, DB Neon produksi-mirip, data uji bertag `E2E-<timestamp>` dan dibersihkan sendiri.
+
+| Area | Status | Bukti |
+|---|---|---|
+| Products CRUD + search/sort/pagination | ✅ | Kriteria 2.1.1–2.1.4 (SKU duplikat → 409 `DUPLICATE_SKU`; produk dengan lot/order → 409 `PRODUCT_IN_USE`) |
+| Lots (create, edit guard, koreksi FIFO) | ✅ | Kriteria 3.1.1–3.1.3 (`INSUFFICIENT_STOCK` saat qty < sudah dialokasikan) |
+| Orders create + state machine | ✅ | Kriteria 4.1.1–4.1.3, 5.1.4, 5.4.4 (`INVALID_TRANSITION`) |
+| FIFO alokasi (urutan `received_at`) | ✅ | Kriteria 5.1.1–5.1.3; alokasi Lot-A(10)+Lot-B(2) terekam di `order_item_allocations` |
+| Anti-oversell konkuren | ✅ Tier 2 | 10 order paralel @15 unit pada stok 20 → tepat 1× `200`, 9× `409`, stok akhir `5` ≥ 0 |
+| Rollback cancel atomik | ✅ | Kriteria 5.4.1–5.4.3; `available_qty` pulih persis, alokasi terhapus |
+| Auto-release scan | ✅ | Kriteria 6.1.1–6.1.4 (scan kondisional + guard lock baris) |
+| Dashboard stock-summary / valuation / low-stock / order-stats | ✅ | Kriteria 7.1.1, 7.1.3, 7.2.1; angka cross-checked terhadap agregasi SQL mentah |
+| **Total** | **64 assertion lulus, 0 gagal** | `apps/backend/scripts/smoke-e2e.js` |

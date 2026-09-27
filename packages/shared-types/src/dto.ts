@@ -1,71 +1,70 @@
-import {
-  ORDER_CHANNEL,
-  ORDER_STATUS,
-  type OrderChannel,
-  type OrderStatus,
-} from './constants';
+import type { OrderChannel, OrderStatus } from './constants';
 
 export interface ProductDto {
   id: string;
   sku: string;
   name: string;
-  minBufferStock: number;
-  availableStock: number;
-  createdAt: string;
-  updatedAt: string;
+  min_buffer_stock: number;
+  available_stock: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductDetailDto extends ProductDto {
+  lots: LotDto[];
 }
 
 export interface CreateProductDto {
   sku: string;
   name: string;
-  minBufferStock: number;
+  min_buffer_stock: number;
 }
 
 export interface UpdateProductDto {
   sku?: string;
   name?: string;
-  minBufferStock?: number;
+  min_buffer_stock?: number;
 }
 
 export interface LotDto {
   id: string;
-  productId: string;
-  purchasePrice: string;
-  initialQty: number;
-  availableQty: number;
-  receivedAt: string;
-  createdAt: string;
+  product_id: string;
+  purchase_price: string;
+  initial_qty: number;
+  available_qty: number;
+  received_at: string;
+  created_at: string;
 }
 
 export interface CreateLotDto {
-  productId: string;
-  purchasePrice: string;
-  initialQty: number;
-  receivedAt: string;
+  product_id: string;
+  purchase_price: string;
+  initial_qty: number;
+  received_at: string;
 }
 
 export interface OrderItemAllocationDto {
-  lotId: string;
-  lotReceivedAt: string;
-  allocatedQty: number;
+  lot_id: string;
+  lot_received_at: string;
+  allocated_qty: number;
 }
 
 export interface OrderItemDto {
   id: string;
-  productId: string;
+  product_id: string;
   sku: string;
   name: string;
-  requestedQty: number;
+  requested_qty: number;
   allocations: OrderItemAllocationDto[];
 }
 
 export interface OrderDto {
   id: string;
-  orderNumber: string;
+  order_number: string;
   channel: OrderChannel;
   status: OrderStatus;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface OrderDetailDto extends OrderDto {
@@ -73,8 +72,8 @@ export interface OrderDetailDto extends OrderDto {
 }
 
 export interface CreateOrderItemDto {
-  productId: string;
-  requestedQty: number;
+  product_id: string;
+  requested_qty: number;
 }
 
 export interface CreateOrderDto {
@@ -96,25 +95,32 @@ export interface AuthResponseDto {
   user: { id: string; username: string };
 }
 
-export interface ValuationRowDto {
-  productId: string;
+export interface StockSummaryDto {
+  product_id: string;
   sku: string;
   name: string;
-  totalQty: number;
-  valuation: string;
+  total_qty: number;
 }
 
-export interface LowStockRowDto {
-  productId: string;
+export interface ValuationDto {
+  product_id: string;
   sku: string;
   name: string;
-  totalQty: number;
-  minBufferStock: number;
+  total_qty: number;
+  total_value: string;
+}
+
+export interface LowStockDto {
+  product_id: string;
+  sku: string;
+  name: string;
+  total_qty: number;
+  min_buffer_stock: number;
 }
 
 export interface OrderStatsDto {
-  byStatus: Record<OrderStatus, number>;
-  byChannel: Record<OrderChannel, number>;
+  by_status: Record<OrderStatus, number>;
+  by_channel: Record<OrderChannel, number>;
   total: number;
 }
 

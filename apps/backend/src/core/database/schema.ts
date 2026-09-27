@@ -5,6 +5,7 @@ import {
   integer,
   numeric,
   pgEnum,
+  pgSequence,
   pgTable,
   timestamp,
   uniqueIndex,
@@ -21,6 +22,9 @@ export const orderStatus = pgEnum('order_status', [
 ]);
 
 export const orderChannel = pgEnum('order_channel', ['WEB', 'POS']);
+
+/** Monotonic counter backing human-readable order numbers. */
+export const orderNumberSeq = pgSequence('order_number_seq');
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),

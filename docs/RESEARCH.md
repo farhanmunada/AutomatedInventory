@@ -218,6 +218,8 @@ const sortedItems = [...orderItems].sort((a, b) =>
 
 ---
 
+> **Status pasca-keputusan (2026-09-27):** §4 (BullMQ Worker) dan §5 (Redis Cache Stok) **TIDAK DIPAKAI** — Redis/BullMQ dihapus dari projek atas keputusan operator. Diganti scan DB + `@nestjs/schedule` (lihat `ARCHITECTURE.md` §4.3 dan D-9..D-12). Bagian ini dibiarkan sebagai catatan riset.
+
 ## 4. BullMQ Worker Idempotent (NestJS)
 
 ### 4.1 Integrasi NestJS

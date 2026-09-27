@@ -1,20 +1,24 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { DbModule } from './core/database/db.module';
-import { RedisModule } from './core/redis/redis.module';
 import { AuthCoreModule } from './core/auth/auth.module';
+import { DbModule } from './core/database/db.module';
 import { HealthController } from './core/health.controller';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { LotsModule } from './modules/lots/lots.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { ProductsModule } from './modules/products/products.module';
 import { UsersModule } from './modules/users/users.module';
-import { StockCacheModule } from './modules/stock-cache/stock-cache.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DbModule,
-    RedisModule,
     AuthCoreModule,
     UsersModule,
-    StockCacheModule,
+    ProductsModule,
+    LotsModule,
+    OrdersModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
 })
