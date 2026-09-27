@@ -11,3 +11,5 @@ id_rsa
 coverage/
 *.log
 .DS_Store
+
+*.tsbuildinfo
