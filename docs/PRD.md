@@ -435,12 +435,18 @@ Fitur dinyatakan selesai jika **seluruh** kriteria terpenuhi:
 
 | Komponen | Teknologi |
 |---|---|
-| Framework | Next.js App Router |
-| UI Components | Shadcn/ui (Radix primitives + Tailwind CSS v4) |
-| Tabel data | TanStack Table v8 (`manualPagination` server-side) |
+| Framework | Next.js 15 App Router |
+| UI Components | primitif UI tulis-tangan di `components/ui/` (Dialog, Badge, Toast, Skeleton) di atas Tailwind CSS v4 |
+| Tabel data | komponen `<DataTable>` tulis-tangan, `manualPagination` server-side |
 | Data fetching | TanStack Query v5 (`keepPreviousData`) |
-| Forms | React Hook Form + Zod resolver |
+| Forms | controlled components + validasi Zod langsung |
+| Styling token | Tailwind v4 `@theme` di `app/globals.css` (dari tabel §6.2) |
 | Monorepo | pnpm workspace, shared types `@repo/shared-types` |
+
+> Catatan (deviasi D-18 s/d D-21, lihat `docs/ARCHITECTURE.md` §11): Shadcn/ui CLI, Radix,
+> TanStack Table, React Hook Form, dan `@hookform/resolvers` **dikeluarkan** dari stack.
+> Fungsinya digantikan implementasi minimum di atas; tidak ada perbedaan perilaku yang
+> teramati pengguna dari spesifikasi §6.3–§6.8.
 
 ### 6.2 Token Desain Awal
 

@@ -103,45 +103,52 @@ automated-inventory/
 │   │   │       └── dashboard/              (stock-summary, valuation, low-stock, order-stats)
 │   │   ├── scripts/
 │   │   │   ├── seed-admin.ts               (dijalankan via dist/scripts/seed-admin.js)
-│   │   │   └── smoke-e2e.js                (64 assertion, DB nyata, self-cleanup)
+│   │   │   └── smoke-e2e.js                (67 assertion, DB nyata, self-cleanup)
 │   │   ├── drizzle/                        (generated migrations)
 │   │   ├── drizzle.config.ts
 │   │   └── package.json
 │   │
-│   └── frontend/                   @repo/frontend
+│   └── frontend/                   @repo/frontend (Next 15 App Router, React 19)
 │       ├── app/
-│       │   ├── (auth)/login/page.tsx
-│       │   ├── (dashboard)/
-│       │   │   ├── layout.tsx
-│       │   │   ├── page.tsx                 (Dashboard)
-│       │   │   ├── products/
-│       │   │   │   ├── page.tsx
-│       │   │   │   └── [id]/page.tsx
-│       │   │   ├── lots/page.tsx
-│       │   │   └── orders/
-│       │   │       ├── page.tsx
-│       │   │       ├── [id]/page.tsx
-│       │   │       └── new/page.tsx
-│       │   └── globals.css
-│       ├── src/
-│       │   ├── features/
-│       │   │   ├── auth/
-│       │   │   ├── products/
-│       │   │   ├── lots/
-│       │   │   ├── orders/
-│       │   │   └── dashboard/
-│       │   └── shared/
-│       │       ├── api/client.ts           (fetch wrapper)
-│       │       └── components/ui/          (shadcn primitives)
-│       ├── next.config.ts                  (rewrites + transpile)
+│       │   ├── globals.css                 (Tailwind v4 @theme = token PRD §6.2)
+│       │   ├── layout.tsx                  (html/body + Providers)
+│       │   ├── providers.tsx               (QueryClientProvider + ToastProvider)
+│       │   ├── login/page.tsx
+│       │   └── (dashboard)/
+│       │       ├── layout.tsx              (AuthGuard + DashboardNav)
+│       │       ├── page.tsx                (Dashboard: 4 tile, valuasi, low-stock, statistik)
+│       │       ├── products/
+│       │       │   ├── page.tsx            (tabel + search/sort/pagination + dialog CRUD)
+│       │       │   └── [id]/page.tsx       (detail + daftar lot FIFO)
+│       │       ├── lots/
+│       │       │   └── page.tsx            (tabel lot + dialog terima lot)
+│       │       └── orders/
+│       │           ├── page.tsx            (filter status/channel + transisi valid)
+│       │           ├── [id]/page.tsx       (timeline status + item & alokasi)
+│       │           └── new/page.tsx        (form multi-item + Simpan Draft / Simpan & Cadangkan)
+│       ├── components/
+│       │   ├── auth-guard.tsx              (gate sesi client-side)
+│       │   ├── dashboard-nav.tsx           (header, nav aktif, logout)
+│       │   ├── data-ui.tsx                 (Card, StatTile, ErrorBanner, PaginationBar)
+│       │   ├── lot-form-dialog.tsx         (zod + mutation + invalidation)
+│       │   ├── product-form-dialog.tsx
+│       │   ├── transition-control.tsx      (dropdown hanya transisi valid)
+│       │   └── ui/                         (badge, dialog, skeleton, toast — primitif tulis tangan)
+│       ├── lib/
+│       │   ├── api.ts                      (fetch wrapper, token, envelope error, 401 bounce)
+│       │   ├── endpoints.ts                (pemetaan API_PATHS -> fungsi tertipe)
+│       │   ├── format.ts                   (IDR, tanggal Asia/Jakarta, qty)
+│       │   └── cn.ts
+│       ├── scripts/smoke-web.js            (Tier 2: SSR + proxy /api, 14 assertion)
+│       ├── next.config.ts                  (rewrite /api -> backend, same-origin)
 │       └── package.json
 │
 └── packages/
-    └── shared-types/               @repo/shared-types
+    └── shared-types/               @repo/shared-types (punya build step: tsc -> dist/)
         └── src/
             ├── index.ts
-            ├── enums.ts            (OrderStatus, Channel)
-            ├── dtos.ts             (ProductDto, OrderDto, ...)
+            ├── constants.ts        (ORDER_STATUS, ORDER_CHANNEL, VALID_TRANSITIONS, AUTO_RELEASE_TIMEOUT_MS)
+            ├── dto.ts              (ProductDto, OrderDto, PaginatedResponse, ApiError, ...)
             └── api-paths.ts        (endpoint constants)
 ```
 
@@ -333,7 +340,7 @@ Cross-module communication hanya via controller public API atau event. Dilarang 
 
 ---
 
-## 6. Dependency Manifest (Perlu Konfirmasi Manusia)
+## 6. Dependency manifest §(Perlu Konfirmasi Manusia)
 
 ### 6.1 Backend (`apps/backend`)
 
@@ -351,19 +358,19 @@ Cross-module communication hanya via controller public API atau event. Dilarang 
 | `@nestjs/schedule` | cron | Auto-release scan tiap 1 menit |
 | **Dev:** `drizzle-kit`, `tsx`, `typescript`, `eslint` | dev | Migrasi, seed, lint |
 
-> ~~`ioredis`~~, ~~`@nestjs/bullmq`~~, ~~`bullmq`~~ — **dihapus** dari manifest (revisi v1.2). Tidak dipakai.
+> ~~`ioredis`~~, ~~`@nestjs/bullmq`~~, ~~`bullmq`~~ — **dihapus** dari manifest §(revisi v1.2). Tidak dipakai.
 
 ### 6.2 Frontend (`apps/frontend`)
 
 | Package | Kategori | Alasan |
 |---|---|---|
-| `next`, `react`, `react-dom` | core | Framework |
-| `@tanstack/react-table` | data | v8 — server-side table |
-| `@tanstack/react-query` | data | v5 — caching & pagination |
-| `react-hook-form` | form | Create Order multi-item |
-| `@hookform/resolvers` | form | Zod resolver bridge |
-| `tailwindcss` v4 | styling | Shadcn base |
-| Shadcn primitives (copy-in, **bukan dependency npm**) | UI | Button, Input, Table, Dialog, Badge, Toast |
+| `next`, `react`, `react-dom` | core | Framework (Next 15 App Router, React 19) |
+| `@tanstack/react-query` | data | v5 — fetching, `keepPreviousData`, invalidation lintas halaman |
+| `zod` | form | Schema form reuse dari pola validasi backend |
+| `tailwindcss` v4 + `@tailwindcss/postcss` | styling | Design token §6.2 PRD diekspresikan sebagai `@theme` |
+| **Dev:** `typescript`, `@types/react`, `@types/node` | dev | Typecheck |
+
+> **Revisi v1.2:** `@tanstack/react-table`, `react-hook-form`, dan `@hookform/resolvers` **tidak dipakai**. Semua tabel halaman ini punya < 8 kolom tetap dan form-nya 3-4 field, sehingga markup langsung + validasi `zod` lebih pendek daripada lapisan abstraksi tersebut. Shadcn/ui juga tidak di-install (butuh Radix + CLI `components.json`); primitif `Dialog`, `Badge`, `Toast`, `Skeleton` ditulis tangan di `components/ui/` dengan gaya yang sama (lihat D-19).
 
 > **Ponytail:** Turborepo **tidak** ditambahkan — 2 app + 1 paket cukup dengan `pnpm -r`.
 
@@ -451,9 +458,15 @@ Fase implementasi dipecah menjadi sub-tugas independen. Tiap sub-tugas = 1 unit 
 
 ## 10. Lingkup Eksekusi Sekarang
 
-**Yang akan dikerjakan setelah approval Gerbang 2:**
-- Tahap 1.1 → 1.5 (fondasi backend), lalu berhenti untuk checkpoint.
-- Setiap sub-tugas: implementasi → verifikasi → commit atomik.
+**Status (2026-09-27):** Tahap 1, 2, dan 3 **SELESAI & terverifikasi** (67 assertion backend + 14 assertion frontend).
+
+Sisa Tahap 4:
+
+| # | Sisa pekerjaan | Catatan |
+|---|---|---|
+| 4.2 | `pnpm lint` penuh untuk frontend | `eslint-config-next` sengaja tidak dipasang (tidak ada di manifest §6.2). Pengganti saat ini: `tsc --noEmit` + `next build` |
+| 4.3 | `pnpm build` dari root | jalan; backend `nest build` + frontend `next build` |
+| 4.4 | Commit seal | dilakukan per tahap (atomik) |
 
 **Tidak termasuk eksekusi ini:** deployment production, CI/CD pipeline, observability setup (post-MVP per `skill-observability-and-instrumentation`).
 
@@ -482,6 +495,10 @@ Perubahan terhadap rencana awal, dicatat sebagai memori persisten.
 | D-15 | Stok per produk (list) | correlated subquery di `select()` | `LEFT JOIN` ke derived table `stockByProduct()` | Drizzle 0.39 me-render `"id"` subquery tanpa kualifikasi → resolve ke scope dalam → stok selalu `0` (bug senyap) |
 | D-16 | Seed admin | `tsx scripts/seed-admin.ts` | `nest build` + `node dist/scripts/seed-admin.js` | esbuild/tsx tidak meng-emit `emitDecoratorMetadata` → DI NestJS rusak |
 | D-17 | Rate limiting login | tidak dispesifikasi detail | `LoginRateLimitGuard` (Map in-memory, sliding window 10/menit/IP) + `@Public()` | PRD §4.2 mewajibkan; tanpa Redis, store bersama tidak tersedia. Skala >1 instance → pindahkan ke store bersama |
+| D-18 | Tabel & form frontend | `@tanstack/react-table` + `react-hook-form` + `@hookform/resolvers` | markup tabel langsung + state `useState` + validasi `zod` | Paket terpasang lalu dibatalkan sebelum dipakai: tabel di sini < 8 kolom tetap dan form 3-4 field, sehingga lapisan abstraksi menambah baris tanpa menghilangkan pekerjaan. Diff lebih kecil = keputusan Ponytail |
+| D-19 | Shadcn/ui (CLI + Radix) | `npx shadcn add` menyalin ~20 file + dependensi Radix | primitif tulis tangan di `components/ui/` (Dialog, Badge, Toast, Skeleton) memakai token Tailwind yang sama | Shadcn saat ini butuh React 19 + Radix; versi copy-in manual menjaga perilaku yang dibutuhkan (focus, Escape, aria) tanpa menambah dependency |
+| D-20 | Gate sesi frontend | middleware/server redirect | `AuthGuard` client-side (token di `localStorage`) + `api.ts` bounce 401 | Token disimpan di `localStorage` (tidak dikirim sebagai cookie), sehingga Next middleware tidak bisa membacanya. Efek samping yang sudah diperbaiki: `AuthGuard` dulu merender skeleton sampai cek sesi selesai, sehingga HTML SSR halaman dalam kosong — sekarang children dirender langsung dan redirect jalan di efek |
+| D-21 | React version | belum ditetapkan | React 19 + `@types/react@19` | `next@15` mendukung keduanya; React 19 dipilih agar `use()`/ref-as-prop tetap tersedia saat dibutuhkan |
 
 ### Status Verifikasi Tahap 1
 
@@ -508,4 +525,20 @@ Server diboot nyata di `:3999`, DB Neon produksi-mirip, data uji bertag `E2E-<ti
 | Rollback cancel atomik | ✅ | Kriteria 5.4.1–5.4.3; `available_qty` pulih persis, alokasi terhapus |
 | Auto-release scan | ✅ | Kriteria 6.1.1–6.1.4 (scan kondisional + guard lock baris) |
 | Dashboard stock-summary / valuation / low-stock / order-stats | ✅ | Kriteria 7.1.1, 7.1.3, 7.2.1; angka cross-checked terhadap agregasi SQL mentah |
-| **Total** | **64 assertion lulus, 0 gagal** | `apps/backend/scripts/smoke-e2e.js` |
+| **Total** | **67 assertion lulus, 0 gagal** | `apps/backend/scripts/smoke-e2e.js` |
+
+### Status Verifikasi Tahap 3 (frontend)
+
+Runner: `pnpm --filter @repo/frontend test` → `next build` lalu `node scripts/smoke-web.js`.
+Server Next produksi asli di `:3000`, backend NestJS asli di `:3001` (diboot oleh skrip), DB Neon nyata.
+
+| Area | Status | Bukti |
+|---|---|---|
+| Build & typecheck | ✅ | `tsc --noEmit` 0 error; `next build` sukses, 9 rute ter-generate (7 static + 2 dynamic) |
+| SSR semua halaman | ✅ | `/login`, `/`, `/products`, `/lots`, `/orders`, `/orders/new`, `/products/[id]`, `/orders/[id]` → 200 dengan penanda konten masing-masing, tanpa halaman error |
+| Rewrite `/api` → backend (ADR-8) | ✅ | `GET /api/health` via `:3000` → 200; tanpa token → 401 (tidak ditelan Next) |
+| Alur login via proxy | ✅ | Password salah → `401 INVALID_CREDENTIALS` tetap sampai ke form (bug bounce 401 diperbaiki, lihat D-20); kredensial benar → `access_token` |
+| Panggilan API terautentikasi via proxy | ✅ | `/api/dashboard/order-stats` dengan Bearer → `total` angka |
+| Error envelope backend tembus UI | ✅ | `?limit=500` → `400 VALIDATION_ERROR` (sumber banner "Coba lagi" di tabel) |
+| Batas file ≤ 300 baris | ✅ | Terpanjang `orders/new/page.tsx` 263 baris (`lots` dipecah ke `components/lot-form-dialog.tsx`) |
+| **Total** | **14 assertion lulus, 0 gagal** | `apps/frontend/scripts/smoke-web.js` |
